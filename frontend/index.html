@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- MANDATORY per modern-web-guidance (dark-mode): Declare support for dark and light themes -->
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#06101e">
+  <title>MedioMeteo Genova — Nowcast & Forecast Terra / Mare</title>
+  <link rel="manifest" href="/manifest.json">
+  <!-- Leaflet CSS per Mappa Radar & Nautica -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    crossorigin=""
+  />
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <!-- Topbar Operativa -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-badge" aria-hidden="true">⚓</div>
+      <div>
+        <div class="brand-title">MedioMeteo Genova</div>
+        <div class="brand-subtitle">AROME 1.3km • ICON-D2 2km • ECMWF • Marine & Radar Nowcast</div>
+      </div>
+    </div>
+
+    <div class="controls-bar">
+      <!-- Switch Dual-Mode TERRA / MARE -->
+      <div class="mode-switch" role="group" aria-label="Modalità operativa Terra o Mare">
+        <button id="btn-mode-land" type="button" class="mode-btn active-land">
+          🏔️ TERRA (Genova & Vallate)
+        </button>
+        <button id="btn-mode-sea" type="button" class="mode-btn">
+          🌊 MARE (Porto & Golfo Ligure)
+        </button>
+      </div>
+
+      <!-- Selettore Distretto -->
+      <select id="district-select" class="select-district" aria-label="Seleziona distretto Provincia di Genova">
+        <option value="GE-CENTRO-PONENTE">Caricamento distretti...</option>
+      </select>
+
+      <button id="btn-refresh" type="button" class="btn-action" title="Aggiorna dati real-time">
+        🔄 Aggiorna Live
+      </button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Banner Stato Sinottico, Convergenza Ligure & Allerte -->
+    <section id="alert-banner" class="alert-banner" aria-live="polite">
+      <div>
+        <strong id="banner-district-name">Genova Centro, Porto Antico & Ponente Urbano</strong>
+        <span id="banner-zone-tag" class="badge-pill level-green" style="margin-left: 0.5rem;">Zona B</span>
+        <p id="banner-microclimate" class="pretty-copy" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;">
+          Caricamento in corso del motore multi-modello...
+        </p>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
+        <span id="badge-convergence" class="badge-pill level-green">Convergenza: Verifica...</span>
+        <span id="badge-confidence" class="badge-pill level-green">Confidenza LAM: --%</span>
+      </div>
+    </section>
+
+    <!-- Griglia Principale: Condizioni Attuali + Mappa Radar/Nautica Interattiva -->
+    <section class="hero-grid">
+      <!-- Card KPI Real-Time & Nowcast -->
+      <article class="card">
+        <div class="card-header">
+          <h2 class="card-title" id="hero-kpi-title">📡 Osservazione & Ensemble Real-Time</h2>
+          <span id="timestamp-badge" style="font-size: 0.76rem; color: var(--text-muted);">--:--</span>
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 1rem;">
+          <div>
+            <div id="main-weather-desc" style="font-size: 1.05rem; font-weight: 700; color: #38bdf8;">--</div>
+            <div style="display: flex; align-items: baseline; gap: 0.8rem; margin-top: 0.2rem;">
+              <span id="main-temp" style="font-size: 2.75rem; font-weight: 900; line-height: 1;">--°C</span>
+              <span id="main-wind-summary" style="font-size: 0.92rem; color: #cbd5e1;">Vento: --</span>
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div id="pressure-value" style="font-size: 0.92rem; font-weight: 700;">---- hPa</div>
+            <div id="pressure-trend" style="font-size: 0.76rem; color: var(--text-muted);">Tendenza 3h: --</div>
+          </div>
+        </div>
+
+        <!-- 6 KPI Dinamici che cambiano focus tra TERRA e MARE -->
+        <div id="kpi-dynamic-grid" class="kpi-grid"></div>
+
+        <!-- Nota locale sul vento ligure -->
+        <div id="wind-local-note" style="margin-top: 0.85rem; padding: 0.65rem 0.85rem; border-radius: 9px; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); font-size: 0.8rem;">
+          🧭 Caricamento diagnostica vento locale...
+        </div>
+      </article>
+
+      <!-- Card Mappa Interattiva Leaflet con Layer Radar RainViewer & Pin Terra/Mare -->
+      <article class="card">
+        <div class="card-header">
+          <h2 class="card-title">🗺️ Mappa Radar Live & Settori Terra/Mare (Clicca un punto)</h2>
+          <div style="display: flex; gap: 0.4rem;">
+            <button id="btn-toggle-radar" type="button" class="btn-action" style="padding: 0.28rem 0.65rem; font-size: 0.75rem;">
+              🌧️ Radar ON/OFF
+            </button>
+          </div>
+        </div>
+        <div id="genova-map" role="application" aria-label="Mappa interattiva Provincia di Genova e Golfo Ligure"></div>
+        <div class="map-toolbar">
+          <span id="map-coords-label">📍 Coordinate attive: 44.4072, 8.9338</span>
+          <span id="radar-time-label">Radar RainViewer: Live</span>
+        </div>
+      </article>
+    </section>
+
+    <!-- Striscia Nowcasting 0-3 Ore (Step 15 Minuti) -->
+    <section class="card">
+      <div class="card-header">
+        <h2 class="card-title">⏱️ Nowcasting Ad Alta Risoluzione (Prossime 3 Ore — Step 15 Minuti)</h2>
+        <span style="font-size: 0.76rem; color: var(--text-muted);">Risoluzione Convettiva 1.3 - 2.0 km</span>
+      </div>
+      <div id="nowcast-15m-strip" class="nowcast-strip"></div>
+    </section>
+
+    <!-- Pannelli Operativi: Sicurezza TERRA (Idrogeologico/Vallate/Valichi) & Sicurezza MARE (Nautica/Onde/Attività) -->
+    <section class="dual-grid">
+      <!-- Pannello TERRA -->
+      <article class="card" id="panel-land-details">
+        <div class="card-header">
+          <h2 class="card-title">🏔️ Diagnostica Operativa TERRA (Bacini, Viabilità & Valichi)</h2>
+          <span id="land-overall-badge" class="badge-pill level-green">REGOLARE</span>
+        </div>
+        <div id="land-risk-items" class="risk-list"></div>
+      </article>
+
+      <!-- Pannello MARE -->
+      <article class="card" id="panel-sea-details">
+        <div class="card-header">
+          <h2 class="card-title">🌊 Diagnostica Operativa MARE (Cinematica Onda & Semaforo Nautico)</h2>
+          <span id="sea-overall-badge" class="badge-pill level-green">FAVOREVOLE</span>
+        </div>
+        <div id="sea-risk-items" class="risk-list"></div>
+      </article>
+    </section>
+
+    <!-- Bollettino Sinottico Esperto & Google Gemini AI Advisor -->
+    <section class="card ai-card">
+      <div class="card-header">
+        <h2 class="card-title">🧠 Bollettino Sinottico Esperto & AI Meteo-Marine Advisor</h2>
+        <span id="ai-engine-badge" class="badge-pill level-green">Motore Sinottico Ligure</span>
+      </div>
+      <h3 id="ai-headline" style="font-size: 1rem; color: #38bdf8; margin-bottom: 0.45rem;">--</h3>
+      <p id="ai-synoptic-body" class="pretty-copy" style="font-size: 0.88rem; color: #e2e8f0; white-space: pre-line;"></p>
+      <div id="ai-takeaways-grid" class="ai-takeaways"></div>
+    </section>
+
+    <!-- Meteogrammi Multi-Modello 24/48h (Confronto AROME 1.3km vs ICON-D2 2km vs ECMWF + Onde/Nodi) -->
+    <section class="charts-grid">
+      <article class="card">
+        <div class="card-header">
+          <h2 class="card-title">📊 Confronto Multi-Modello Pioggia & Temperatura (AROME vs ICON-D2 vs ECMWF)</h2>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="chart-multimodel"></canvas>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-header">
+          <h2 class="card-title">💨🌊 Meteogramma Vento (kt/kmh), Raffiche & Onda Significativa / Max</h2>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="chart-wind-wave"></canvas>
+        </div>
+      </article>
+    </section>
+
+    <!-- Previsione a 7 Giorni Terra & Mare -->
+    <section class="card">
+      <div class="card-header">
+        <h2 class="card-title">📅 Tendenza a 7 Giorni — Provincia di Genova (Terra & Mare)</h2>
+        <span style="font-size: 0.76rem; color: var(--text-muted);">Ensemble pesato LAM + ECMWF IFS</span>
+      </div>
+      <div class="table-responsive">
+        <table class="forecast-table">
+          <thead>
+            <tr>
+              <th>Giorno</th>
+              <th>Condizioni</th>
+              <th>Temp Min / Max</th>
+              <th>Pioggia (Media / Picco LAM)</th>
+              <th>Vento Dominante</th>
+              <th>Raffica Max (km/h | kt)</th>
+              <th>Mare Max (Hs / Hmax @ Tp)</th>
+            </tr>
+          </thead>
+          <tbody id="daily-7d-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Bollettino Meteomar Testuale & Disclaimer Ufficiali di Sicurezza (ADR-0002) -->
+    <footer class="footer-disclaimer">
+      <div><strong>📻 Sintesi Stile METEOMAR (Settore Mar Ligure):</strong> <span id="meteomar-text">--</span></div>
+      <div id="disclaimer-land-text"></div>
+      <div id="disclaimer-sea-text"></div>
+    </footer>
+  </main>
+
+  <!-- Librerie esterne CDN con fallback graceful -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

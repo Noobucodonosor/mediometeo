@@ -9,9 +9,9 @@ Questa cartella raccoglie gli **Architecture Decision Records (ADR)** e il **Bac
 | ID | Titolo | Stato | Priorità | Autori / Fonti |
 | :--- | :--- | :--- | :--- | :--- |
 | **[ADR-0001](./0001-core-architecture.md)** | Architettura Core, Zonizzazione Provincia di Genova (Terra/Mare) e Stack Tecnologico | Accettato (Baseline) | **P1 — Alta** | `@Noobucodonosor` |
-| **[ADR-0002](./0002-security-resilience-apikeys.md)** | Sicurezza, Gestione API Keys, Resilienza Anti-Blackout e Disclaimer Incolumità | Proposto | **P0 — Critica** | `@Noobucodonosor` |
-| **[ADR-0003](./0003-multi-model-nowcast-forecast-engine.md)** | Motore di Fusione Multi-Modello (Ensemble LAM AROME/ICON-D2/ECMWF) e Nowcasting Terra/Mare | Proposto | **P1 — Alta** | `@Noobucodonosor` |
-| **[ADR-0004](./0004-dual-mode-pwa-ai-advisor.md)** | Web App PWA Dual-Mode (Terra/Mare), Mappa Radar/Nautica Interattiva e AI Meteo Advisor (Gemini) | Proposto | **P1 — Alta** | `@Noobucodonosor` |
+| **[ADR-0002](./0002-security-resilience-apikeys.md)** | Sicurezza, Gestione API Keys, Resilienza Anti-Blackout e Disclaimer Incolumità | Accettato | **P0 — Critica** | `@Noobucodonosor` |
+| **[ADR-0003](./0003-multi-model-nowcast-forecast-engine.md)** | Motore di Fusione Multi-Modello (Ensemble LAM AROME/ICON-D2/ECMWF) e Nowcasting Terra/Mare | Accettato | **P1 — Alta** | `@Noobucodonosor` |
+| **[ADR-0004](./0004-dual-mode-pwa-ai-advisor.md)** | Web App PWA Dual-Mode (Terra/Mare), Mappa Radar/Nautica Interattiva e AI Meteo Advisor (Gemini) | Accettato | **P1 — Alta** | `@Noobucodonosor` |
 
 ---
 

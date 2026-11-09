@@ -1,6 +1,6 @@
 # ADR-0004: Web App PWA Dual-Mode (Terra/Mare), Mappa Radar/Nautica Interattiva e AI Meteo Advisor (Google Gemini)
 
-- **Stato:** Proposto (`Proposed`)
+- **Stato:** Accettato (`Accepted`)
 - **Priorità:** P1 — Alta
 - **Data:** 2026-11-09
 - **Autori:** Daniele (`@Noobucodonosor`) & Antigravity AI
@@ -51,13 +51,13 @@ Costruiamo una Single Page Application / PWA ad alte prestazioni:
 
 ## 4. Task Operativi Collegati (con Definition of Done)
 
-- [ ] **TASK-AI-01**: **Implementazione AI Meteo-Marine Advisor con Google Gemini (`google-genai`) e motore sinottico deterministico di fallback**
+- [x] **TASK-AI-01**: **Implementazione AI Meteo-Marine Advisor con Google Gemini (`google-genai`) e motore sinottico deterministico di fallback**
   - *File coinvolti*: `backend/engine/ai_advisor.py`, `backend/main.py`, `tests/test_ai_advisor.py`
   - *Acceptance Criteria*:
     - Genera bollettini strutturati Terra e Mare specifici per la Provincia di Genova e il Golfo Ligure.
     - Usa `google-genai` quando `GEMINI_API_KEY` è configurata e passa automaticamente al generatore esperto deterministico in assenza di chiave o errore rete.
   - *Verification Step*: `pytest tests/test_ai_advisor.py -v`
-- [ ] **TASK-UI-01**: **Sviluppo Web App Responsive + PWA Dual-Mode (Terra/Mare) con Mappa Radar/Nautica Leaflet, Meteogrammi Multi-Modello e Pannello Allerte/Consigli**
+- [x] **TASK-UI-01**: **Sviluppo Web App Responsive + PWA Dual-Mode (Terra/Mare) con Mappa Radar/Nautica Leaflet, Meteogrammi Multi-Modello e Pannello Allerte/Consigli**
   - *File coinvolti*: `frontend/index.html`, `frontend/styles.css`, `frontend/app.js`, `frontend/manifest.json`, `frontend/sw.js`, `tests/test_api_e2e.py`
   - *Acceptance Criteria*:
     - Switch fluido tra Modalità Terra (`km/h`, `mm/h`, rischio idrogeologico vallate) e Modalità Mare (`nodi`, `Beaufort`, `Douglas`, periodo d'onda `s`, `H_s`/`H_max`, consigli navigazione).
