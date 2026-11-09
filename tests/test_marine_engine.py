@@ -1,4 +1,4 @@
-"""Test suite per TASK-MAR-01 (ADR-0003): Motore Meteo-Marino, Beaufort, Douglas, Wave Steepness e Sicurezza."""
+"""Test suite per TASK-MAR-01 (ADR-0003, ADR-0006): Motore Meteo-Marino, Beaufort, Douglas, Wave Steepness e Fisica Costiera."""
 
 from __future__ import annotations
 
@@ -40,12 +40,11 @@ def test_wave_steepness_warning_on_short_chop() -> None:
     )
     assert res["waves"]["steepness_warning"] is True
     assert res["waves"]["max_height_m"] > 2.0
-    assert res["activities_safety"]["sailing_yachting"]["level"] in ("yellow", "red")
-    assert res["activities_safety"]["kayak_sup_swimming"]["level"] == "red"
+    assert res["waves"]["steepness_pct"] > 5.0
 
 
-def test_calm_summer_sea_allows_all_activities() -> None:
-    """Con mare quasi calmo (Hs 0.2m, vento 5 kt) tutte le attività nautiche e costiere devono essere GREEN."""
+def test_calm_summer_sea_pure_physics() -> None:
+    """Con mare quasi calmo (Hs 0.2m, vento 5 kt) verifica che i parametri fisici siano calcolati senza semafori soggettivi."""
     res = compute_wave_dynamics(
         hs_m=0.2,
         period_s=5.0,
@@ -55,8 +54,7 @@ def test_calm_summer_sea_allows_all_activities() -> None:
         wind_dir_deg=190.0,
         sst_c=23.0,
     )
-    assert res["overall_level"] == "green"
-    assert res["activities_safety"]["sailing_yachting"]["level"] == "green"
-    assert res["activities_safety"]["coastal_fishing"]["level"] == "green"
-    assert res["activities_safety"]["kayak_sup_swimming"]["level"] == "green"
-    assert res["activities_safety"]["harbor_mooring"]["level"] == "green"
+    assert "activities_safety" not in res
+    assert res["waves"]["douglas"]["degree"] == 2
+    assert res["waves"]["steepness_warning"] is False
+    assert res["coastal_physics"]["visibility_nm"] > 0

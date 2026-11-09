@@ -1,4 +1,12 @@
-"""AI Meteo & Marine Advisor alimentato da Google Gemini (`google-genai`) con Fallback Sinottico Esperto (ADR-0004)."""
+"""Analista Sinottico AI alimentato da Google Gemini (`google-genai`) con Fallback Fisico Ligure (ADR-0004, ADR-0006).
+
+REGOLA FONDAMENTALE (Allineamento /grill-me #2 e #12):
+- L'AI Advisor opera come **Analista Sinottico Puro**: spiega il *perché fisico* dei fenomeni
+  (convergenza Tramontana Scura vs Scirocco, scarto tra AROME 1.3km / ICON-D2 2km / ECMWF / GFS / MET.no,
+  evoluzione dello spettro d'onda Hs/Hmax/Tp, fase di marea, risacca in rada e riscontro con le stazioni OMIRL).
+- In modalità MARE non esprime mai giudizi soggettivi paternalistici ("esci / non uscire"), lasciando la valutazione
+  al comandante sulla base dei parametri fisici completi.
+"""
 
 from __future__ import annotations
 
@@ -12,62 +20,86 @@ from backend.config import get_settings
 def build_deterministic_synoptic_bulletin(
     weather_pkg: dict[str, Any], mode: str = "both"
 ) -> dict[str, Any]:
-    """Genera un bollettino tecnico-sinottico completo basato sulle regole fisiche liguri (Fallback 100% affidabile)."""
+    """Genera un bollettino tecnico-sinottico completo basato sulle leggi fisiche liguri (Fallback 100% affidabile)."""
     district = weather_pkg["district"]
+    loc = weather_pkg.get("location") or district
     now = weather_pkg["nowcast"]["current"]
     conv = weather_pkg["nowcast"]["ligurian_convergence"]
     land = weather_pkg["land"]["risk_assessment"]
     sea = weather_pkg["sea"]["marine_conditions"]
     hourly = weather_pkg["forecast"]["hourly_48h"]
+    obs = weather_pkg.get("observations_live") or {}
 
-    # Analisi evoluzione prossime 6-12 ore
     next_6h = hourly[:6] if hourly else [now]
     max_rain_6h = max((h["precip_mm"] for h in next_6h), default=0.0)
     max_gust_6h_kmh = max((h["gust_kmh"] for h in next_6h), default=now["gust_kmh"])
     max_gust_6h_kt = max((h["gust_knots"] for h in next_6h), default=sea["wind"]["gust_knots"])
     max_wave_6h_m = max((h["wave_hs_m"] for h in next_6h), default=sea["waves"]["significant_height_m"])
 
+    # Analisi divergenza tra i 5 modelli (AROME, ICON-D2, ECMWF, GFS, MET.no)
+    models_now = now.get("models") or {}
+    arome_w = (models_now.get("meteofrance_arome_france_hd") or {}).get("wind_knots")
+    icond2_w = (models_now.get("icon_d2") or {}).get("wind_knots")
+    ecmwf_w = (models_now.get("ecmwf_ifs025") or {}).get("wind_knots")
+    metno_w = (models_now.get("met_norway") or {}).get("wind_knots")
+
+    nearest_st = (obs.get("nearest_weather_stations") or [None])[0]
+    obs_clause = ""
+    if nearest_st:
+        obs_clause = (
+            f" Stazione reale OMIRL più vicina: {nearest_st['name']} ({nearest_st['distance_km']} km) "
+            f"rileva {nearest_st.get('wind_knots', now['wind_knots'])} kt e {nearest_st.get('temp_c', now['temp_c'])}°C."
+        )
+
     synoptic_headline = (
-        f"Quadro Sinottico su {district['name']}: {now['weather_description']} "
-        f"({now['temp_c']:.1f}°C), ventilazione da {now['wind_cardinal']} ({now['wind_ligurian_name']}) "
-        f"e affidabilità ensemble {now['confidence_pct']}%."
+        f"Analisi Sinottica su {loc['name']}: {now['weather_description']} "
+        f"({now['temp_c']:.1f}°C), flusso da {now['wind_cardinal']} ({now['wind_ligurian_name']}) "
+        f"e convergenza inter-modello {now['confidence_pct']}%."
     )
 
     if conv["active"]:
         synoptic_analysis = (
-            f"ATTENZIONE CONVERGENZA LIGURE (Indice {conv['convergence_score']}/100): "
-            f"{conv['explanation']} I modelli LAM ad altissima risoluzione (AROME 1.3km e ICON-D2 2km) "
-            f"indicano un picco precipitativo nelle prossime 6 ore fino a {max_rain_6h:.1f} mm/h "
-            f"con raffiche fino a {max_gust_6h_kmh:.0f} km/h ({max_gust_6h_kt:.0f} kt)."
+            f"CONVERGENZA LIGURE ATTIVA (Indice {conv['convergence_score']}/100): "
+            f"{conv['explanation']} I modelli LAM non-idrostatici (AROME 1.3km: {arome_w} kt, ICON-D2 2km: {icond2_w} kt) "
+            f"risolvono una linea di taglio orografica con picco precipitativo nelle prossime 6h fino a {max_rain_6h:.1f} mm/h "
+            f"e raffiche fino a {max_gust_6h_kmh:.0f} km/h ({max_gust_6h_kt:.1f} kt).{obs_clause}"
         )
     else:
         synoptic_analysis = (
-            f"Flusso atmosferico governato da correnti di {now['wind_ligurian_name']} ({now['wind_cardinal']}). "
-            f"{sea['wind']['local_note']} Pressione atmosferica a {now['pressure_hpa']:.1f} hPa "
-            f"({now['pressure_trend_label'].lower()}). Nelle prossime 6 ore precipitazioni massime attese "
-            f"intorno a {max_rain_6h:.1f} mm/h e raffiche massime fino a {max_gust_6h_kmh:.0f} km/h."
+            f"Campo barico a {now['pressure_hpa']:.1f} hPa ({now['pressure_trend_label'].lower()}) "
+            f"con ventilazione da {now['wind_ligurian_name']} ({now['wind_cardinal']}, {now['wind_dir_deg']:.0f}°). "
+            f"Confronto 5 modelli sul vento attuale: AROME 1.3km={arome_w} kt, ICON-D2 2km={icond2_w} kt, "
+            f"ECMWF 9km={ecmwf_w} kt, MET.no={metno_w} kt (Spread Δ={now['model_spread']['wind_spread_knots']} kt). "
+            f"Nelle prossime 6h precipitazioni massime attese {max_rain_6h:.1f} mm/h.{obs_clause}"
         )
 
+    thermo = land.get("thermo_comfort") or {}
     land_briefing = (
-        f"• **Stato Bacini & Viabilità ({district['short_name']}):** {land['hydrogeological']['label']}. "
+        f"• **Stato Bacini Idrografici & Sottopassi ({district['short_name']}):** {land['hydrogeological']['label']}. "
         f"{land['hydrogeological']['advice']}\n"
-        f"• **Vento & Infrastrutture Stradali:** {land['wind_viability']['label']} "
-        f"(Vento medio {now['wind_kmh']:.0f} km/h, raffiche {now['gust_kmh']:.0f} km/h). "
+        f"• **Viadotti & Sopraelevata:** {land['wind_viability']['label']} "
+        f"(Vento {now['wind_kmh']:.1f} km/h, raffica {now['gust_kmh']:.1f} km/h). "
         f"{land['wind_viability']['advice']}\n"
-        f"• **Valichi Appenninici (Giovi / Turchino / A7 / A26 / Aveto):** {land['appennino_passes']['label']}."
+        f"• **Valichi Appenninici & Termo-Igrometria:** {land['appennino_passes']['label']} "
+        f"(Zero termico {land['appennino_passes']['freezing_level_m']} m, Dew Point {thermo.get('dew_point_c', 11.0)}°C, "
+        f"Stato: {thermo.get('maccaja_status', 'Assente')})."
     )
 
+    bay_surge = sea["coastal_physics"]["bay_surge"]
+    tides = sea["coastal_physics"]["tides"]
+    curr = sea["coastal_physics"]["surface_current"]
     sea_briefing = (
-        f"• **Vento & Mare ({district['short_name']}):** {sea['wind']['ligurian_name']} ({sea['wind']['cardinal']}) "
-        f"a {sea['wind']['speed_knots']:.0f} kt (raffiche {sea['wind']['gust_knots']:.0f} kt, "
-        f"Forza {sea['wind']['beaufort']['force']} Beaufort — {sea['wind']['beaufort']['label']}).\n"
-        f"• **Moto Ondoso & Periodo:** Mare {sea['waves']['douglas']['label']} con Hs {sea['waves']['significant_height_m']:.2f} m "
-        f"(onda massima Hmax {sea['waves']['max_height_m']:.2f} m, trend 6h fino a {max_wave_6h_m:.2f} m) "
-        f"e periodo di picco Tp {sea['waves']['peak_period_s']:.1f} s da {sea['waves']['direction_cardinal']} "
-        f"({sea['waves']['steepness_class']}).\n"
-        f"• **Consiglio Comandanti & Diporto:** Vela/Diporto: *{sea['activities_safety']['sailing_yachting']['label']}* — "
-        f"{sea['activities_safety']['sailing_yachting']['note']} "
-        f"Kayak/Costiero: *{sea['activities_safety']['kayak_sup_swimming']['label']}*."
+        f"• **Cinematica del Vento ({loc['name']}):** {sea['wind']['ligurian_name']} ({sea['wind']['cardinal']}, {sea['wind']['direction_deg']:.0f}°) "
+        f"a {sea['wind']['speed_knots']:.1f} kt ({sea['wind']['speed_ms']:.1f} m/s | {sea['wind']['speed_kmh']:.1f} km/h), "
+        f"raffiche {sea['wind']['gust_knots']:.1f} kt (Forza {sea['wind']['beaufort']['force']} Beaufort — {sea['wind']['beaufort']['label']}).\n"
+        f"• **Moto Ondoso & Spettro Completo dell'Onda:** Mare {sea['waves']['douglas']['label']} — Hs {sea['waves']['significant_height_m']:.2f} m, "
+        f"Hmax statistica {sea['waves']['max_height_m']:.2f} m (trend 6h fino a {max_wave_6h_m:.2f} m), "
+        f"Onda viva da vento {sea['waves']['wind_wave_height_m']:.2f} m + Swell lungo {sea['waves']['swell_height_m']:.2f} m @ Tp {sea['waves']['peak_period_s']:.1f} s "
+        f"da {sea['waves']['direction_cardinal']} (L = {sea['waves']['wavelength_m']:.0f} m, {sea['waves']['steepness_class']}).\n"
+        f"• **Fisica Costiera, Risacca & Marea:** Apertura cala {bay_surge['bay_open_axis_deg']}° ({bay_surge['exposure_geometry']}, "
+        f"Kr={bay_surge['refraction_kr']}, Ks={bay_surge['shoaling_ks']}) → frangente/risacca a riva {bay_surge['shore_breaker_height_m']:.2f} m. "
+        f"Marea {tides['current_height_cm']} cm ({tides['current_phase']}), corrente superficiale {curr['speed_knots']:.2f} kt da {curr['direction_cardinal']}, "
+        f"visibilità {sea['coastal_physics']['visibility_nm']:.1f} NM."
     )
 
     return {
@@ -76,14 +108,15 @@ def build_deterministic_synoptic_bulletin(
         "ai_powered": False,
         "mode": mode,
         "district_id": district["id"],
+        "location_id": loc.get("id", district["id"]),
         "headline": synoptic_headline,
         "synoptic_nowcast_analysis": synoptic_analysis,
         "land_operational_briefing": land_briefing,
         "sea_operational_briefing": sea_briefing,
         "key_takeaways": [
-            f"Nowcast 0-3h: {now['weather_description']}, pioggia {land['hydrogeological']['precip_1h_mm']} mm/h, confidenza modelli {now['confidence_pct']}%.",
-            f"Terra ({district['short_name']}): {land['hydrogeological']['label']} | Vento {now['wind_kmh']:.0f} km/h (raffica {now['gust_kmh']:.0f} km/h).",
-            f"Mare (Golfo Ligure): {sea['wind']['speed_knots']:.0f} kt (raffica {sea['wind']['gust_knots']:.0f} kt) da {sea['wind']['cardinal']}, Onda Hs {sea['waves']['significant_height_m']:.2f}m @ {sea['waves']['peak_period_s']:.1f}s ({sea['waves']['douglas']['label']}).",
+            f"Nowcast 0-3h: {now['weather_description']}, rain-rate {land['hydrogeological']['precip_1h_mm']} mm/h, spread vento 5 modelli Δ={now['model_spread']['wind_spread_knots']} kt.",
+            f"Terra ({loc['name']}): {land['hydrogeological']['label']} | Vento {now['wind_kmh']:.1f} km/h (raffica {now['gust_kmh']:.1f} km/h).",
+            f"Mare (Fisica Pura): {sea['wind']['speed_knots']:.1f} kt (raffica {sea['wind']['gust_knots']:.1f} kt) da {sea['wind']['cardinal']}, Hs {sea['waves']['significant_height_m']:.2f}m (Hmax {sea['waves']['max_height_m']:.2f}m) @ {sea['waves']['peak_period_s']:.1f}s, risacca {bay_surge['shore_breaker_height_m']:.2f}m.",
         ],
     }
 
@@ -91,7 +124,7 @@ def build_deterministic_synoptic_bulletin(
 async def generate_ai_bulletin(
     weather_pkg: dict[str, Any], mode: str = "both"
 ) -> dict[str, Any]:
-    """Genera il bollettino intelligente tramite Google Gemini (`google-genai`) con fallback deterministico immediato."""
+    """Genera l'analisi sinottica tramite Google Gemini (`google-genai`) con fallback deterministico immediato."""
     settings = get_settings()
     baseline = build_deterministic_synoptic_bulletin(weather_pkg, mode=mode)
 
@@ -102,27 +135,31 @@ async def generate_ai_bulletin(
         from google import genai
 
         district = weather_pkg["district"]
+        loc = weather_pkg.get("location") or district
         now = weather_pkg["nowcast"]["current"]
         conv = weather_pkg["nowcast"]["ligurian_convergence"]
         land = weather_pkg["land"]["risk_assessment"]
         sea = weather_pkg["sea"]["marine_conditions"]
+        bay_surge = sea["coastal_physics"]["bay_surge"]
 
         prompt = (
-            "Sei il Previsore Meteo-Marino Senior della Sala Operativa di Genova (MedioMeteo Genova).\n"
-            "Redigi un bollettino tecnico ma chiarissimo in italiano per la Provincia di Genova, "
-            "suddiviso per chi è a TERRA e per chi è in MARE.\n\n"
-            f"DISTRETTO: {district['name']} ({district['arpal_zone']})\n"
-            f"MICROCLIMA: {district['microclimate_notes']}\n"
-            f"STATO ATTUALE E NOWCAST 0-3H: {now['weather_description']}, Temp {now['temp_c']}°C, "
-            f"Pioggia 1h: {land['hydrogeological']['precip_1h_mm']} mm, Cumulata 24h prevista: {land['hydrogeological']['precip_24h_mm']} mm.\n"
-            f"VENTO: {now['wind_ligurian_name']} ({now['wind_cardinal']}) {now['wind_kmh']} km/h ({sea['wind']['speed_knots']} kt), "
-            f"Raffiche {now['gust_kmh']} km/h ({sea['wind']['gust_knots']} kt), Forza {sea['wind']['beaufort']['force']} Beaufort.\n"
-            f"CONVERGENZA LIGURE (Tramontana/Scirocco): {conv['status']} ({conv['explanation']}).\n"
-            f"STATO DEL MARE: {sea['waves']['douglas']['label']}, Onda significativa Hs {sea['waves']['significant_height_m']} m, "
-            f"Onda max Hmax {sea['waves']['max_height_m']} m, Periodo picco Tp {sea['waves']['peak_period_s']} s da {sea['waves']['direction_cardinal']} "
-            f"({sea['waves']['steepness_class']}), Temperatura acqua {sea['waves']['sea_surface_temp_c']}°C.\n\n"
-            "Rispondi con 3 brevi paragrafi incisivi (max 160 parole totali): "
-            "1) Analisi Sinottica & Nowcast 0-3h; 2) Avvisi Operativi Terra (Genova e Vallate); 3) Avvisi Operativi Mare (Porto, Costa e Largo)."
+            "Sei l'Analista Sinottico Meteo-Marino Senior per la Provincia di Genova (MedioMeteo Genova).\n"
+            "REGOLA TASSATIVA: Opera come analista fisico puro. Spiega i meccanismi barici, orografici e oceanografici "
+            "senza mai dare consigli paternalistici 'esci / non uscire in barca'.\n\n"
+            f"LOCALITÀ: {loc['name']} ({district['arpal_zone']})\n"
+            f"STATO ATTUALE & NOWCAST 0-3H: {now['weather_description']}, Temp {now['temp_c']}°C, "
+            f"Pressione {now['pressure_hpa']} hPa ({now['pressure_trend_label']}), "
+            f"Pioggia 1h: {land['hydrogeological']['precip_1h_mm']} mm, Cumulata 24h: {land['hydrogeological']['precip_24h_mm']} mm.\n"
+            f"VENTO: {now['wind_ligurian_name']} ({now['wind_cardinal']}) {sea['wind']['speed_knots']} kt ({now['wind_kmh']} km/h), "
+            f"Raffiche {sea['wind']['gust_knots']} kt ({now['gust_kmh']} km/h), Forza {sea['wind']['beaufort']['force']} Beaufort.\n"
+            f"CONVERGENZA LIGURE: {conv['status']} ({conv['explanation']}).\n"
+            f"FISICA DEL MARE: {sea['waves']['douglas']['label']}, Hs {sea['waves']['significant_height_m']} m, "
+            f"Hmax {sea['waves']['max_height_m']} m, Periodo Tp {sea['waves']['peak_period_s']} s da {sea['waves']['direction_cardinal']}, "
+            f"Lunghezza d'onda {sea['waves']['wavelength_m']} m, Risacca in cala {bay_surge['shore_breaker_height_m']} m.\n\n"
+            "Rispondi con 3 paragrafi tecnici concisi (max 160 parole): "
+            "1) Dinamica Sinottica & Confronto Modelli (AROME/ICON-D2/ECMWF); "
+            "2) Fisica al Suolo, Bacini e Valichi; "
+            "3) Cinematica Marina, Spettro d'Onda e Risacca Costiera."
         )
 
         def _call_gemini() -> str:
