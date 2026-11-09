@@ -1,6 +1,6 @@
 # ADR-0002: Sicurezza, Gestione API Keys, Resilienza Anti-Blackout e Disclaimer Incolumità
 
-- **Stato:** Proposto (`Proposed`)
+- **Stato:** Accettato (`Accepted`)
 - **Priorità:** P0 — Critica
 - **Data:** 2026-11-09
 - **Autori:** Daniele (`@Noobucodonosor`) & Antigravity AI
@@ -43,7 +43,7 @@ Un sistema di **Nowcasting e Forecasting per Terra e Mare** presenta due superfi
 
 ## 4. Task Operativi Collegati (con Definition of Done)
 
-- [ ] **TASK-SEC-01**: **Hardening configurazione `.env`, geofencing coordinate Liguria, circuit-breaker con fallback cache e validazione `pre_release_check.py`**
+- [x] **TASK-SEC-01**: **Hardening configurazione `.env`, geofencing coordinate Liguria, circuit-breaker con fallback cache e validazione `pre_release_check.py`**
   - *File coinvolti*: `backend/config.py`, `backend/security.py`, `.env.example`, `tests/test_security_resilience.py`
   - *Acceptance Criteria*:
     - Nessuna chiave API presente nel codice sorgente o esposta dagli endpoint API.
