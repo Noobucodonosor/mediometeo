@@ -23,6 +23,7 @@ from backend.engine.alerts import build_alerts_summary
 from backend.engine.coastal_route import COASTAL_WAYPOINTS, compute_coastal_route_eta
 from backend.engine.connectors import fetch_all_raw_sources
 from backend.engine.ensemble import build_complete_weather_package
+from backend.engine.omirl_arpal import fetch_omirl_station_chart
 from backend.locations import (
     AMP_PORTOFINO_ZONES,
     GeoLocation,
@@ -140,7 +141,7 @@ async def _load_or_compute_weather_package(
         )
     )
     loc_key = location_meta.id if location_meta else district.id
-    cache_key = f"pkg:v2:{loc_key}:{lat:.3f}:{lon:.3f}"
+    cache_key = f"pkg:v2.2:{loc_key}:{lat:.3f}:{lon:.3f}"
 
     if not force_refresh:
         cached = cache.get(cache_key, allow_stale=False)
@@ -264,6 +265,24 @@ async def api_get_observations(
         "coordinates": pkg["coordinates"],
         "observations_live": pkg["observations_live"],
     }
+
+
+@app.get("/api/v1/omirl-chart")
+async def api_get_omirl_station_chart(
+    code: str = Query(..., min_length=2, max_length=12, description="ShortCode centralina OMIRL (es. GEPOA, MTPOR, FIRPO)"),
+    sensor: str = Query(default="Vento", pattern="^(Vento|Termo|Pluvio|Idro)$", description="Tipo sensore OMIRL"),
+) -> dict[str, Any]:
+    """Restituisce la serie storica reale al minuto di una centralina OMIRL Regione Liguria."""
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            return await fetch_omirl_station_chart(client, short_code=code, sensor_type=sensor)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Serie storica OMIRL non disponibile per {code}/{sensor}: {exc}",
+        ) from exc
 
 
 @app.get("/api/v1/nowcast")

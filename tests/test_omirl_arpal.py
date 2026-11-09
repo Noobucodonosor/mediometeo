@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from backend.engine.omirl_arpal import (
+    GENOVA_HYDROMETERS_META,
     GENOVA_WEBCAMS_CATALOG,
     REFERENCE_OMIRL_STATIONS,
     extract_var_data,
+    is_omirl_refdate_fresh,
 )
 
 
@@ -40,3 +42,18 @@ def test_omirl_stations_hydrometers_and_webcams_catalog() -> None:
     for cam in GENOVA_WEBCAMS_CATALOG:
         assert cam["stream_page_url"].startswith("https://")
         assert 44.1 <= cam["lat"] <= 44.7
+
+
+def test_omirl_bulk_hydrometers_meta_and_freshness_filter() -> None:
+    """Verifica i metadati dei 23+ idrometri reali genovesi e il filtro anti-sensori obsoleti (TASK-DATA-02)."""
+    assert len(GENOVA_HYDROMETERS_META) >= 20
+    assert "FIRPO" in GENOVA_HYDROMETERS_META
+    assert "GEFER" in GENOVA_HYDROMETERS_META
+    assert "GERIV" in GENOVA_HYDROMETERS_META
+    assert "CARPB" in GENOVA_HYDROMETERS_META
+
+    # Sensore CHIRI (Chiavari) fermo al 2023 deve essere scartato
+    assert is_omirl_refdate_fresh("2023-04-19T14:40:00") is False
+    # Sensore del 2026 deve essere considerato fresco
+    assert is_omirl_refdate_fresh("2026-11-09T22:00:00") is True
+

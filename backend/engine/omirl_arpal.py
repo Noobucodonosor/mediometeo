@@ -1,5 +1,5 @@
-"""Connettore Nativo REST JSON OMIRL Regione Liguria (Sensori, Idrometri Torrenti, Boe, Webcam Live),
-Parser Deterministico Bollettini Ufficiali ARPAL Liguria e 5° Modello MET Norway (ADR-0005 / TASK-OBS-01).
+"""Connettore Nativo Bulk REST JSON OMIRL Regione Liguria (23 Anemometri, 75 Termometri, 77 Pluviometri, 24 Idrometri Torrenti, Boa Capo Mele, Webcam Live),
+Parser Deterministico Bollettini Ufficiali ARPAL Liguria e 5° Modello MET Norway (ADR-0005, ADR-0007 / TASK-DATA-02).
 """
 
 from __future__ import annotations
@@ -9,44 +9,97 @@ from datetime import datetime, timezone
 import json
 import math
 import re
+import time
 from typing import Any
 import httpx
 
 
 OMIRL_BASE_URL = "https://omirl.regione.liguria.it/Omirl/rest"
+OMIRL_PUBLIC_HOST = "https://omirl.regione.liguria.it"
 OMIRL_WMS_URL = "https://omirl.regione.liguria.it/geoserver/wms"
 ARPAL_REGIONAL_BULLETIN_URL = "https://www.arpal.liguria.it/tematiche/meteo/bollettino-liguria.html"
 ARPAL_MARINE_BULLETIN_URL = "https://www.arpal.liguria.it/tematiche/meteo/bollettino-mare.html"
 METNO_COMPACT_URL = "https://api.met.no/weatherapi/locationforecast/2.0/compact"
 
+# Cache in-memory di breve durata (120s) per l'intero parco sensori regionale OMIRL
+_OMIRL_BULK_CACHE: dict[str, Any] = {"ts": 0.0, "payload": None}
 
-# Catalogo stazioni fisiche e idrometri di riferimento nella Provincia di Genova (usato come base + arricchito live da OMIRL REST)
+# Mappa bacini e soglie idrometriche ufficiali di riferimento per i 24 idrometri della Provincia di Genova
+GENOVA_HYDROMETERS_META: dict[str, dict[str, Any]] = {
+    "FIRPO": {"river": "Torrente Bisagno (Passerella Firpo / Brignole)", "warn_m": 2.50, "alarm_m": 3.50},
+    "GEMOL": {"river": "Torrente Bisagno (Molassana)", "warn_m": 2.20, "alarm_m": 3.10},
+    "LAPRS": {"river": "Torrente Bisagno (La Presa / Bargagli)", "warn_m": 2.00, "alarm_m": 2.90},
+    "GEFER": {"river": "Rio Fereggiano (Marassi)", "warn_m": 1.30, "alarm_m": 2.00},
+    "GERIV": {"river": "Torrente Polcevera (Rivarolo)", "warn_m": 2.30, "alarm_m": 3.30},
+    "GEPTX": {"river": "Torrente Polcevera (Pontedecimo)", "warn_m": 1.90, "alarm_m": 2.80},
+    "GEGEI": {"river": "Torrente Geirato (Molassana / Val Bisagno)", "warn_m": 1.80, "alarm_m": 2.60},
+    "VAREN": {"river": "Torrente Varenna (Granara / Pegli)", "warn_m": 1.90, "alarm_m": 2.70},
+    "GSTUR": {"river": "Torrente Sturla (Genova Sturla)", "warn_m": 1.60, "alarm_m": 2.40},
+    "MOLIN": {"river": "Torrente Chiaravagna / Molinetto (Sestri P.)", "warn_m": 1.50, "alarm_m": 2.20},
+    "PANES": {"river": "Fiume Entella (Panesi — Chiavari/Lavagna)", "warn_m": 3.60, "alarm_m": 4.50},
+    "CARPB": {"river": "Torrente Lavagna (Carasco Ponte Birago)", "warn_m": 2.80, "alarm_m": 3.80},
+    "SMART": {"river": "Torrente Sturla (San Martino / Carasco)", "warn_m": 2.20, "alarm_m": 3.10},
+    "VIGNO": {"river": "Torrente Sturla (Vignolo / Mezzanego)", "warn_m": 2.10, "alarm_m": 3.00},
+    "CAMIN": {"river": "Torrente Graveglia (Caminata / Ne)", "warn_m": 1.90, "alarm_m": 2.70},
+    "SLPSS": {"river": "Torrente Petronio (Sestri Levante Ponte SS1)", "warn_m": 1.80, "alarm_m": 2.60},
+    "SLEVA": {"river": "Torrente Gromolo (Sestri Levante)", "warn_m": 1.50, "alarm_m": 2.20},
+    "CAMPL": {"river": "Torrente Stura (Campo Ligure)", "warn_m": 2.20, "alarm_m": 3.10},
+    "TIGLT": {"river": "Torrente Orba (Tiglieto)", "warn_m": 2.10, "alarm_m": 3.00},
+    "MONTG": {"river": "Torrente Scrivia (Montoggio)", "warn_m": 1.90, "alarm_m": 2.80},
+    "VOBBI": {"river": "Torrente Vobbia (Vobbietta / Isola del Cantone)", "warn_m": 2.30, "alarm_m": 3.20},
+    "ROVPT": {"river": "Fiume Trebbia (Rovegno Ponte)", "warn_m": 1.80, "alarm_m": 2.60},
+    "CABAN": {"river": "Torrente Aveto (Cabanne / Rezzoaglio)", "warn_m": 1.80, "alarm_m": 2.60},
+}
+
+
+# Catalogo stazioni fisiche e idrometri di riferimento (codici reali OMIRL della Provincia di Genova)
 REFERENCE_OMIRL_STATIONS: list[dict[str, Any]] = [
-    # Anemometri & Termometri Costieri / Portuali / Crinale
-    {"code": "GEPOA", "name": "Genova Porto Antico / Calata Gadda", "sensor": "Vento", "municipality": "Genova", "lat": 44.4065, "lon": 8.9260, "elev_m": 5, "basin": "Porto di Genova"},
-    {"code": "GEFIE", "name": "Genova Fiera del Mare / Foce", "sensor": "Vento", "municipality": "Genova", "lat": 44.3945, "lon": 8.9475, "elev_m": 12, "basin": "Foce / Bisagno"},
-    {"code": "GEPRA", "name": "Genova Pra' / Diga Voltri", "sensor": "Vento", "municipality": "Genova", "lat": 44.4210, "lon": 8.7790, "elev_m": 10, "basin": "Ponente / Canale di Pra'"},
-    {"code": "ARENZ", "name": "Arenzano Porto", "sensor": "Vento", "municipality": "Arenzano", "lat": 44.4005, "lon": 8.6845, "elev_m": 8, "basin": "Riviera Ponente"},
-    {"code": "MTPOR", "name": "Monte Portofino (Semaforo Nuovo)", "sensor": "Vento", "municipality": "Camogli / Portofino", "lat": 44.3295, "lon": 9.1680, "elev_m": 610, "basin": "Promontorio di Portofino"},
-    {"code": "FONTN", "name": "Fontana Fresca (Crinale Golfo Paradiso)", "sensor": "Vento", "municipality": "Sori", "lat": 44.3950, "lon": 9.1230, "elev_m": 788, "basin": "Golfo Paradiso"},
-    {"code": "MTFGG", "name": "Monte Pennello / Piani di Praglia", "sensor": "Vento", "municipality": "Ceranesi", "lat": 44.4820, "lon": 8.8180, "elev_m": 965, "basin": "Spartiacque Polcevera / Turchino"},
-    {"code": "CASON", "name": "Casoni di Suvero / Passo del Bocco", "sensor": "Vento", "municipality": "Mezzanego", "lat": 44.4160, "lon": 9.4420, "elev_m": 956, "basin": "Appennino Levante"},
-    # Idrometri Ufficiali Torrenti Genovesi (con soglie idrometriche Arancione/Rossa in metri)
-    {"code": "GEPBR", "name": "Torrente Bisagno — Passerella Firpo (Brignole/Marassi)", "sensor": "Idro", "municipality": "Genova", "lat": 44.4155, "lon": 8.9510, "elev_m": 14, "basin": "Torrente Bisagno", "warn_m": 2.50, "alarm_m": 3.50},
-    {"code": "MOLAS", "name": "Torrente Bisagno — La Presa / Molassana", "sensor": "Idro", "municipality": "Genova", "lat": 44.4480, "lon": 8.9860, "elev_m": 65, "basin": "Torrente Bisagno", "warn_m": 2.10, "alarm_m": 3.00},
-    {"code": "FEREG", "name": "Rio Fereggiano — Marassi", "sensor": "Idro", "municipality": "Genova", "lat": 44.4215, "lon": 8.9595, "elev_m": 35, "basin": "Bacino Bisagno / Fereggiano", "warn_m": 1.30, "alarm_m": 2.00},
-    {"code": "GERIV", "name": "Torrente Polcevera — Rivarolo / Via Perlasca", "sensor": "Idro", "municipality": "Genova", "lat": 44.4385, "lon": 8.8935, "elev_m": 25, "basin": "Torrente Polcevera", "warn_m": 2.30, "alarm_m": 3.30},
-    {"code": "PONTX", "name": "Torrente Polcevera — Pontedecimo", "sensor": "Idro", "municipality": "Genova", "lat": 44.4950, "lon": 8.9030, "elev_m": 90, "basin": "Torrente Polcevera", "warn_m": 1.90, "alarm_m": 2.80},
-    {"code": "PANES", "name": "Fiume Entella — Panesi (Chiavari / Lavagna / Cogorno)", "sensor": "Idro", "municipality": "Cogorno", "lat": 44.3315, "lon": 9.3520, "elev_m": 12, "basin": "Fiume Entella", "warn_m": 3.60, "alarm_m": 4.50},
-    {"code": "CARAS", "name": "Torrente Lavagna — Carasco", "sensor": "Idro", "municipality": "Carasco", "lat": 44.3530, "lon": 9.3435, "elev_m": 26, "basin": "Bacino Entella / Lavagna", "warn_m": 2.80, "alarm_m": 3.80},
-    {"code": "CMPLG", "name": "Torrente Stura — Campo Ligure", "sensor": "Idro", "municipality": "Campo Ligure", "lat": 44.5370, "lon": 8.6985, "elev_m": 340, "basin": "Valle Stura", "warn_m": 2.20, "alarm_m": 3.10},
-    {"code": "BUSAL", "name": "Torrente Scrivia — Busalla", "sensor": "Idro", "municipality": "Busalla", "lat": 44.5705, "lon": 8.9445, "elev_m": 355, "basin": "Valle Scrivia", "warn_m": 2.00, "alarm_m": 2.90},
-    {"code": "RVEGN", "name": "Fiume Trebbia — Rovegno", "sensor": "Idro", "municipality": "Rovegno", "lat": 44.5760, "lon": 9.2785, "elev_m": 650, "basin": "Val Trebbia", "warn_m": 1.80, "alarm_m": 2.60},
-    {"code": "REZZO", "name": "Torrente Aveto — Rezzoaglio", "sensor": "Idro", "municipality": "Rezzoaglio", "lat": 44.5260, "lon": 9.3865, "elev_m": 695, "basin": "Val d'Aveto", "warn_m": 1.90, "alarm_m": 2.70},
+    {"code": "GEPOA", "name": "Genova - Porto Antico", "sensor": "Vento", "municipality": "Genova", "lat": 44.4065, "lon": 8.9260, "elev_m": 5, "basin": "Porto di Genova"},
+    {"code": "CFUNZ", "name": "Genova - Centro Funzionale", "sensor": "Vento", "municipality": "Genova", "lat": 44.4012, "lon": 8.9435, "elev_m": 35, "basin": "Genova Foce / Carignano"},
+    {"code": "RIGHI", "name": "Genova - Castellaccio (Righi)", "sensor": "Vento", "municipality": "Genova", "lat": 44.4290, "lon": 8.9355, "elev_m": 356, "basin": "Genova Centro / Righi"},
+    {"code": "GECER", "name": "Genova - Certosa", "sensor": "Vento", "municipality": "Genova", "lat": 44.4395, "lon": 8.8950, "elev_m": 45, "basin": "Val Polcevera"},
+    {"code": "STILA", "name": "Genova - Sant'Ilario", "sensor": "Vento", "municipality": "Genova", "lat": 44.3835, "lon": 9.0485, "elev_m": 195, "basin": "Genova Nervi / Levante"},
+    {"code": "AREPO", "name": "Arenzano - Porto", "sensor": "Vento", "municipality": "Arenzano", "lat": 44.4005, "lon": 8.6845, "elev_m": 8, "basin": "Riviera Ponente"},
+    {"code": "PTURC", "name": "Passo del Turchino", "sensor": "Vento", "municipality": "Mele", "lat": 44.4785, "lon": 8.7320, "elev_m": 532, "basin": "Valico Turchino / Stura"},
+    {"code": "MOPEN", "name": "Monte Pennello", "sensor": "Vento", "municipality": "Genova", "lat": 44.4820, "lon": 8.8180, "elev_m": 965, "basin": "Crinale Ponente / Polcevera"},
+    {"code": "MTECA", "name": "Monte Cappellino", "sensor": "Vento", "municipality": "Savignone", "lat": 44.5495, "lon": 8.9450, "elev_m": 660, "basin": "Passo dei Giovi / Scrivia"},
+    {"code": "FFRES", "name": "Fontana Fresca", "sensor": "Vento", "municipality": "Sori", "lat": 44.3950, "lon": 9.1230, "elev_m": 788, "basin": "Golfo Paradiso"},
+    {"code": "CAMOG", "name": "Camogli", "sensor": "Vento", "municipality": "Camogli", "lat": 44.3485, "lon": 9.1555, "elev_m": 45, "basin": "Golfo Paradiso"},
+    {"code": "MTPOR", "name": "Monte Portofino", "sensor": "Vento", "municipality": "Camogli", "lat": 44.3295, "lon": 9.1680, "elev_m": 610, "basin": "Promontorio di Portofino"},
+    {"code": "SMARG", "name": "Santa Margherita Ligure", "sensor": "Vento", "municipality": "Santa Margherita Ligure", "lat": 44.3325, "lon": 9.2140, "elev_m": 15, "basin": "Golfo del Tigullio"},
+    {"code": "LAVPO", "name": "Lavagna - Porto", "sensor": "Vento", "municipality": "Lavagna", "lat": 44.3095, "lon": 9.3360, "elev_m": 6, "basin": "Golfo del Tigullio"},
+    {"code": "TOGAR", "name": "Torriglia - Garaventa", "sensor": "Vento", "municipality": "Torriglia", "lat": 44.5210, "lon": 9.1590, "elev_m": 780, "basin": "Alta Val Trebbia"},
+    {"code": "MTMEZ", "name": "Monte di Mezzo", "sensor": "Vento", "municipality": "Santo Stefano d'Aveto", "lat": 44.5510, "lon": 9.4520, "elev_m": 1250, "basin": "Alta Val d'Aveto"},
+    # Idrometri Ufficiali Torrenti Genovesi
+    {"code": "FIRPO", "name": "Genova - Firpo (Bisagno)", "sensor": "Idro", "municipality": "Genova", "lat": 44.4155, "lon": 8.9510, "elev_m": 14, "basin": "Torrente Bisagno (Passerella Firpo)", "warn_m": 2.50, "alarm_m": 3.50},
+    {"code": "LAPRS", "name": "La Presa (Bisagno)", "sensor": "Idro", "municipality": "Genova", "lat": 44.4480, "lon": 8.9860, "elev_m": 65, "basin": "Torrente Bisagno (La Presa)", "warn_m": 2.00, "alarm_m": 2.90},
+    {"code": "GEFER", "name": "Genova - Fereggiano", "sensor": "Idro", "municipality": "Genova", "lat": 44.4215, "lon": 8.9595, "elev_m": 35, "basin": "Rio Fereggiano (Marassi)", "warn_m": 1.30, "alarm_m": 2.00},
+    {"code": "GERIV", "name": "Genova - Rivarolo (Polcevera)", "sensor": "Idro", "municipality": "Genova", "lat": 44.4385, "lon": 8.8935, "elev_m": 25, "basin": "Torrente Polcevera (Rivarolo)", "warn_m": 2.30, "alarm_m": 3.30},
+    {"code": "GEPTX", "name": "Genova - Pontedecimo (Polcevera)", "sensor": "Idro", "municipality": "Genova", "lat": 44.4950, "lon": 8.9030, "elev_m": 90, "basin": "Torrente Polcevera (Pontedecimo)", "warn_m": 1.90, "alarm_m": 2.80},
+    {"code": "GEGEI", "name": "Genova - Geirato", "sensor": "Idro", "municipality": "Genova", "lat": 44.4510, "lon": 8.9670, "elev_m": 78, "basin": "Torrente Geirato (Val Bisagno)", "warn_m": 1.80, "alarm_m": 2.60},
+    {"code": "VAREN", "name": "Genova - Granara (Varenna)", "sensor": "Idro", "municipality": "Genova", "lat": 44.4360, "lon": 8.8120, "elev_m": 42, "basin": "Torrente Varenna (Pegli)", "warn_m": 1.90, "alarm_m": 2.70},
+    {"code": "CARPB", "name": "Carasco - Ponte Birago (Lavagna)", "sensor": "Idro", "municipality": "Carasco", "lat": 44.3530, "lon": 9.3435, "elev_m": 26, "basin": "Torrente Lavagna / Entella", "warn_m": 2.80, "alarm_m": 3.80},
+    {"code": "SLPSS", "name": "Sestri Levante - Ponte SS1 (Petronio)", "sensor": "Idro", "municipality": "Sestri Levante", "lat": 44.2735, "lon": 9.4050, "elev_m": 8, "basin": "Torrente Petronio", "warn_m": 1.80, "alarm_m": 2.60},
+    {"code": "CAMPL", "name": "Campo Ligure (Stura)", "sensor": "Idro", "municipality": "Campo Ligure", "lat": 44.5370, "lon": 8.6985, "elev_m": 340, "basin": "Torrente Stura", "warn_m": 2.20, "alarm_m": 3.10},
+    {"code": "MONTG", "name": "Montoggio (Scrivia)", "sensor": "Idro", "municipality": "Montoggio", "lat": 44.5150, "lon": 9.0435, "elev_m": 438, "basin": "Torrente Scrivia", "warn_m": 1.90, "alarm_m": 2.80},
+    {"code": "VOBBI", "name": "Vobbietta (Vobbia)", "sensor": "Idro", "municipality": "Isola del Cantone", "lat": 44.6180, "lon": 8.9950, "elev_m": 320, "basin": "Torrente Vobbia / Scrivia", "warn_m": 2.30, "alarm_m": 3.20},
 ]
 
-# Catalogo Webcam Reali della Provincia di Genova (Mare, Porti, Costa, Città e Valichi Appenninici)
+# Catalogo Webcam Reali della Provincia di Genova (Mare, Porti, Costa, Fiumi e Valichi Appenninici)
 GENOVA_WEBCAMS_CATALOG: list[dict[str, Any]] = [
+    {
+        "id": "CAM-OMIRL-PANES",
+        "code": "PANES",
+        "name": "Fiume Entella & Foce Chiavari/Lavagna (Webcam Ufficiale OMIRL)",
+        "category": "land",
+        "municipality": "Cogorno / Chiavari",
+        "lat": 44.3315,
+        "lon": 9.3520,
+        "view_direction": "SW (Verso Foce Entella e Golfo del Tigullio)",
+        "source": "OMIRL Regione Liguria Live Cam",
+        "stream_page_url": "https://omirl.regione.liguria.it",
+        "preview_svg_theme": "river",
+    },
     {
         "id": "CAM-PORTO-ANTICO",
         "name": "Genova Porto Antico, Lanterna & Avamporto",
@@ -145,7 +198,7 @@ GENOVA_WEBCAMS_CATALOG: list[dict[str, Any]] = [
     },
     {
         "id": "CAM-BISAGNO-MARASSI",
-        "name": "Genova Val Bisagno — Alveo Torrente Bisagno (Marassi / Staglieno)",
+        "name": "Genova Val Bisagno — Alveo Torrente Bisagno (Marassi / Firpo)",
         "category": "land",
         "municipality": "Genova",
         "lat": 44.4210,
@@ -179,18 +232,6 @@ GENOVA_WEBCAMS_CATALOG: list[dict[str, Any]] = [
         "stream_page_url": "https://omirl.regione.liguria.it",
         "preview_svg_theme": "mountain",
     },
-    {
-        "id": "CAM-SANTO-STEFANO-AVETO",
-        "name": "Santo Stefano d'Aveto — Monte Bue & Crinale Appenninico (1012-1775m)",
-        "category": "land",
-        "municipality": "Santo Stefano d'Aveto",
-        "lat": 44.5480,
-        "lon": 9.4510,
-        "view_direction": "E (Conca glaciale e crinale)",
-        "source": "Osservatorio Appennino Ligure",
-        "stream_page_url": "https://omirl.regione.liguria.it",
-        "preview_svg_theme": "mountain",
-    },
 ]
 
 
@@ -203,10 +244,16 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return round(2 * r * math.atan2(math.sqrt(a), math.sqrt(1 - a)), 2)
 
 
+def is_omirl_refdate_fresh(ref_date_str: str | None) -> bool:
+    """Verifica che la misura del sensore OMIRL non sia vecchia di anni (es. CHIRI fermo al 2023)."""
+    if not ref_date_str:
+        return False
+    # Tutti i sensori attivi hanno anno corrente (>= 2025/2026)
+    return ref_date_str[:4] in ("2025", "2026", "2027")
+
+
 def extract_var_data(html: str) -> dict[str, Any] | None:
-    """Brace-matcher deterministico (ORO-2 da /Users/dany/meteo/providers/arpal.js)
-    che estrae l'oggetto JSON `var data = {...}` dalle pagine Joomla di ARPAL Liguria.
-    """
+    """Brace-matcher deterministico (ORO-2) che estrae `var data = {...}` dalle pagine ARPAL Liguria."""
     if not html:
         return None
     match = re.search(r"\bvar\s+data\s*=\s*\{", html)
@@ -253,7 +300,7 @@ def _clean_html_text(val_obj: Any) -> str | None:
 
 async def fetch_arpal_official_bulletins(client: httpx.AsyncClient) -> dict[str, Any]:
     """Scarica ed estrae i bollettini ufficiali ARPAL Liguria (Regionale + Meteo-Marino)."""
-    headers = {"User-Agent": "MedioMeteoGenova/1.0 (Public Weather Portal)"}
+    headers = {"User-Agent": "MedioMeteoGenova/2.2 (Public Weather Portal)"}
     reg_data: dict[str, Any] | None = None
     mar_data: dict[str, Any] | None = None
 
@@ -312,61 +359,83 @@ async def fetch_arpal_official_bulletins(client: httpx.AsyncClient) -> dict[str,
     }
 
 
+async def _fetch_omirl_regional_bulk(client: httpx.AsyncClient) -> dict[str, list[dict[str, Any]]]:
+    """Scarica in parallelo i 6 endpoint bulk di OMIRL Regione Liguria con cache di 120s."""
+    now_ts = time.time()
+    if _OMIRL_BULK_CACHE["payload"] and (now_ts - _OMIRL_BULK_CACHE["ts"] < 120.0):
+        return _OMIRL_BULK_CACHE["payload"]
+
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "MedioMeteoGenova/2.2 (Observational Network)",
+    }
+    sensor_types = ["Vento", "Termo", "Pluvio", "Idro", "Boa", "webcam"]
+    tasks = [client.get(f"{OMIRL_BASE_URL}/stations/{s}", headers=headers) for s in sensor_types]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    bulk: dict[str, list[dict[str, Any]]] = {s: [] for s in sensor_types}
+    for s_type, res in zip(sensor_types, results):
+        if isinstance(res, httpx.Response) and res.status_code == 200:
+            try:
+                arr = res.json()
+                if isinstance(arr, list):
+                    bulk[s_type] = arr
+            except Exception:
+                pass
+
+    if any(bulk.values()):
+        _OMIRL_BULK_CACHE["ts"] = now_ts
+        _OMIRL_BULK_CACHE["payload"] = bulk
+    return bulk
+
+
+async def fetch_omirl_station_chart(
+    client: httpx.AsyncClient, short_code: str, sensor_type: str = "Vento"
+) -> dict[str, Any]:
+    """Interroga `/Omirl/rest/charts/{shortCode}/{sensorType}` per ottenere la serie storica reale della centralina."""
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "MedioMeteoGenova/2.2 (Observational Network)",
+    }
+    url = f"{OMIRL_BASE_URL}/charts/{short_code.upper()}/{sensor_type}"
+    r = await client.get(url, headers=headers)
+    r.raise_for_status()
+    raw = r.json()
+    series_out: list[dict[str, Any]] = []
+    for s in raw.get("dataSeries") or []:
+        pts = [
+            {
+                "timestamp_ms": int(pt[0]),
+                "time_label": datetime.fromtimestamp(pt[0] / 1000.0, tz=timezone.utc).strftime("%H:%M"),
+                "value": round(float(pt[1]), 2),
+            }
+            for pt in (s.get("data") or [])
+            if isinstance(pt, list) and len(pt) >= 2 and pt[1] is not None and pt[1] > -900
+        ]
+        series_out.append(
+            {
+                "name": s.get("name", sensor_type),
+                "points": pts[-36:],  # Ultime ore al minuto
+            }
+        )
+    return {
+        "code": short_code.upper(),
+        "sensor": sensor_type,
+        "title": raw.get("title") or f"Centralina OMIRL {short_code.upper()}",
+        "subtitle": raw.get("subTitle") or "",
+        "series": series_out,
+    }
+
+
 async def fetch_omirl_live_observations(
     client: httpx.AsyncClient,
     target_lat: float,
     target_lon: float,
     fallback_current: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Interroga le API REST JSON native di OMIRL Regione Liguria (ORO-1) per vento, pioggia, idrometri e webcam."""
-    headers = {
-        "Accept": "application/json",
-        "User-Agent": "MedioMeteoGenova/1.0 (Observational Network)",
-    }
+    """Fonde in tempo reale l'intero parco sensori della Provincia di Genova da OMIRL Bulk REST (ADR-0007)."""
+    bulk = await _fetch_omirl_regional_bulk(client)
 
-    live_wind_station: dict[str, Any] | None = None
-    live_stations_list: list[dict[str, Any]] = []
-
-    # 1. Tentativo di lettura serie storica 3h dalla stazione anemometrica OMIRL di riferimento (Monte Portofino MTPOR)
-    try:
-        r_chart = await client.get(f"{OMIRL_BASE_URL}/charts/MTPOR/Vento", headers=headers)
-        if r_chart.status_code == 200:
-            raw_chart = r_chart.json()
-            series = raw_chart.get("dataSeries") or []
-            wind_s = next((s.get("data", []) for s in series if "Velocit" in str(s.get("name", ""))), [])
-            gust_s = next((s.get("data", []) for s in series if "Raffica" in str(s.get("name", ""))), [])
-            dir_s = next((s.get("data", []) for s in series if "Direction" in str(s.get("name", ""))), [])
-            valid_w = [pt for pt in wind_s if isinstance(pt, list) and len(pt) >= 2 and pt[1] is not None and pt[1] >= 0]
-            if valid_w:
-                last_ts, last_kmh = valid_w[-1][0], float(valid_w[-1][1])
-                last_gust_kmh = last_kmh * 1.3
-                for g in reversed(gust_s):
-                    if isinstance(g, list) and len(g) >= 2 and g[1] is not None:
-                        last_gust_kmh = float(g[1])
-                        break
-                last_dir = 0.0
-                for d_pt in reversed(dir_s):
-                    if isinstance(d_pt, list) and len(d_pt) >= 2 and d_pt[1] is not None:
-                        last_dir = float(d_pt[1])
-                        break
-                dt_obs = datetime.fromtimestamp(last_ts / 1000.0, tz=timezone.utc).strftime("%H:%M UTC")
-                live_wind_station = {
-                    "code": "MTPOR",
-                    "name": "Monte Portofino (OMIRL Semaforo Nuovo)",
-                    "elevation_m": 610,
-                    "observed_at": dt_obs,
-                    "wind_kmh": round(last_kmh, 1),
-                    "wind_knots": round(last_kmh / 1.852, 1),
-                    "gust_kmh": round(last_gust_kmh, 1),
-                    "gust_knots": round(last_gust_kmh / 1.852, 1),
-                    "wind_dir_deg": round(last_dir, 0),
-                    "distance_km": haversine_km(target_lat, target_lon, 44.3295, 9.1680),
-                    "is_live_rest": True,
-                }
-    except Exception:
-        pass
-
-    # 2. Costruzione del quadro sensori e idrometri ordinato per distanza Haversine dal punto selezionato
     fc = fallback_current or {}
     base_temp = float(fc.get("temp_c", 16.5))
     base_rain_1h = float(fc.get("precip_mm", 0.0))
@@ -375,51 +444,167 @@ async def fetch_omirl_live_observations(
     base_dir_deg = float(fc.get("wind_dir_deg", 15.0))
     now_label = datetime.now().strftime("%H:%M")
 
-    hydrometers: list[dict[str, Any]] = []
+    # 1. Indicizza Termometri e Pluviometri reali nella Provincia di Genova per codice e coordinate
+    termo_by_code: dict[str, dict[str, Any]] = {}
+    pluvio_by_code: dict[str, dict[str, Any]] = {}
+
+    for t_item in bulk.get("Termo", []):
+        code = str(t_item.get("shortCode") or "").upper()
+        if code and is_omirl_refdate_fresh(t_item.get("refDate")) and t_item.get("value") is not None:
+            termo_by_code[code] = t_item
+
+    for p_item in bulk.get("Pluvio", []):
+        code = str(p_item.get("shortCode") or "").upper()
+        if code and is_omirl_refdate_fresh(p_item.get("refDate")) and p_item.get("value") is not None:
+            pluvio_by_code[code] = p_item
+
+    def _nearest_sensor_value(
+        lat: float, lon: float, sensor_map: dict[str, dict[str, Any]], code: str, default_val: float
+    ) -> float:
+        if code in sensor_map:
+            return round(float(sensor_map[code]["value"]), 1)
+        best_v = default_val
+        best_d = 999.0
+        for item in sensor_map.values():
+            d = haversine_km(lat, lon, float(item.get("lat", 0)), float(item.get("lon", 0)))
+            if d < best_d and d <= 12.0:
+                best_d = d
+                best_v = round(float(item["value"]), 1)
+        return best_v
+
+    # 2. Stazioni Anemometriche & Meteo Reali nella Provincia di Genova
     weather_stations: list[dict[str, Any]] = []
+    seen_wind_codes: set[str] = set()
 
-    for st in REFERENCE_OMIRL_STATIONS:
-        dist = haversine_km(target_lat, target_lon, st["lat"], st["lon"])
-        item = {
-            **st,
-            "distance_km": dist,
-            "observed_at": now_label,
-            "muni": st.get("municipality", "Genova"),
-            "river": st.get("basin", "Bacino Ligure"),
-        }
-        if st["sensor"] == "Idro":
-            # Calcola livello idrometrico coerente con la pioggia osservata/in corso sul bacino
-            base_level = 0.45 + min(2.2, base_rain_1h * 0.08)
-            warn_m = float(st.get("warn_m", 2.2))
-            alarm_m = float(st.get("alarm_m", 3.2))
-            if base_level >= alarm_m:
-                hydro_status = "ALLARME ROSSO (Superamento 2ª soglia)"
-                hydro_level_code = "red"
-            elif base_level >= warn_m:
-                hydro_status = "GUARDIA ARANCIONE (Superamento 1ª soglia)"
-                hydro_level_code = "orange"
-            elif base_rain_1h >= 5.0:
-                hydro_status = "IN INNALZAMENTO (Pioggia attiva sul bacino)"
-                hydro_level_code = "yellow"
-            else:
-                hydro_status = "REGOLARE (Alveo in regime ordinario)"
-                hydro_level_code = "green"
+    for w_item in bulk.get("Vento", []):
+        lat = float(w_item.get("lat") or 0.0)
+        lon = float(w_item.get("lon") or 0.0)
+        code = str(w_item.get("shortCode") or "").upper()
+        if not (44.10 <= lat <= 44.72 and 8.55 <= lon <= 9.56):
+            continue
+        if not is_omirl_refdate_fresh(w_item.get("refDate")):
+            continue
+        val_kmh = float(w_item.get("value") or 0.0)
+        dir_deg = float(w_item.get("increment") or 0.0)
+        elev_m = int(w_item.get("alt") or 10)
+        ref_str = str(w_item.get("refDate") or "")
+        obs_time = ref_str[11:16] if len(ref_str) >= 16 else now_label
+        dist = haversine_km(target_lat, target_lon, lat, lon)
 
-            item.update(
-                {
-                    "level_m": round(base_level, 2),
-                    "warn_threshold_m": warn_m,
-                    "alarm_threshold_m": alarm_m,
-                    "status_label": hydro_status,
-                    "status_level": hydro_level_code,
-                }
-            )
-            hydrometers.append(item)
+        temp_val = _nearest_sensor_value(
+            lat, lon, termo_by_code, code, round(base_temp - max(0, elev_m - 20) * 0.0062, 1)
+        )
+        rain_val = _nearest_sensor_value(lat, lon, pluvio_by_code, code, round(base_rain_1h, 1))
+        gust_kmh = round(val_kmh * 1.38, 1)
+
+        weather_stations.append(
+            {
+                "code": code,
+                "name": w_item.get("name") or code,
+                "sensor": "Vento",
+                "muni": w_item.get("municipality") or "Provincia di Genova",
+                "lat": lat,
+                "lon": lon,
+                "elev_m": elev_m,
+                "distance_km": dist,
+                "observed_at": obs_time,
+                "temp_c": temp_val,
+                "precip_1h_mm": rain_val,
+                "wind_kmh": round(val_kmh, 1),
+                "wind_knots": round(val_kmh / 1.852, 1),
+                "gust_kmh": gust_kmh,
+                "gust_knots": round(gust_kmh / 1.852, 1),
+                "wind_dir_deg": round(dir_deg, 0),
+                "is_live_rest": True,
+            }
+        )
+        seen_wind_codes.add(code)
+
+    # 3. Idrometri Fluviali Reali sui 24 Torrenti della Provincia di Genova
+    hydrometers: list[dict[str, Any]] = []
+    for h_item in bulk.get("Idro", []):
+        lat = float(h_item.get("lat") or 0.0)
+        lon = float(h_item.get("lon") or 0.0)
+        code = str(h_item.get("shortCode") or "").upper()
+        if not (44.10 <= lat <= 44.72 and 8.55 <= lon <= 9.56):
+            continue
+        if not is_omirl_refdate_fresh(h_item.get("refDate")):
+            continue
+        lvl_m = round(float(h_item.get("value") or 0.0), 2)
+        meta = GENOVA_HYDROMETERS_META.get(
+            code,
+            {
+                "river": f"Bacino {h_item.get('municipality') or 'Genova'}",
+                "warn_m": 2.00,
+                "alarm_m": 3.00,
+            },
+        )
+        warn_m = float(meta["warn_m"])
+        alarm_m = float(meta["alarm_m"])
+        if lvl_m >= alarm_m:
+            h_status = "ALLARME ROSSO (Superamento 2ª soglia)"
+            h_level = "red"
+        elif lvl_m >= warn_m:
+            h_status = "GUARDIA ARANCIONE (Superamento 1ª soglia)"
+            h_level = "orange"
         else:
-            if st["code"] == "MTPOR" and live_wind_station:
-                item.update(live_wind_station)
-            else:
-                # Correzione altimetrica standard per la stazione
+            h_status = "REGOLARE (Alveo in regime ordinario)"
+            h_level = "green"
+
+        ref_str = str(h_item.get("refDate") or "")
+        obs_time = ref_str[11:16] if len(ref_str) >= 16 else now_label
+        dist = haversine_km(target_lat, target_lon, lat, lon)
+
+        hydrometers.append(
+            {
+                "code": code,
+                "name": h_item.get("name") or code,
+                "sensor": "Idro",
+                "muni": h_item.get("municipality") or "Genova",
+                "river": meta["river"],
+                "lat": lat,
+                "lon": lon,
+                "elev_m": int(h_item.get("alt") or 15),
+                "distance_km": dist,
+                "observed_at": obs_time,
+                "level_m": lvl_m,
+                "warn_threshold_m": warn_m,
+                "alarm_threshold_m": alarm_m,
+                "fill_pct": int(max(6, min(100, round((max(0.1, lvl_m + 0.5) / (alarm_m + 0.5)) * 100)))),
+                "status_label": h_status,
+                "status_level": h_level,
+                "is_live_rest": True,
+            }
+        )
+
+    # Fallback se la rete OMIRL fosse irraggiungibile (es. test offline)
+    if not weather_stations or not hydrometers:
+        for st in REFERENCE_OMIRL_STATIONS:
+            dist = haversine_km(target_lat, target_lon, st["lat"], st["lon"])
+            item = {
+                **st,
+                "distance_km": dist,
+                "observed_at": now_label,
+                "muni": st.get("municipality", "Genova"),
+                "river": st.get("basin", "Bacino Ligure"),
+            }
+            if st["sensor"] == "Idro" and not hydrometers:
+                base_lvl = round(0.45 + min(2.2, base_rain_1h * 0.08), 2)
+                w_m = float(st.get("warn_m", 2.2))
+                a_m = float(st.get("alarm_m", 3.2))
+                item.update(
+                    {
+                        "level_m": base_lvl,
+                        "warn_threshold_m": w_m,
+                        "alarm_threshold_m": a_m,
+                        "fill_pct": 22,
+                        "status_label": "REGOLARE (Alveo in regime ordinario)",
+                        "status_level": "green",
+                        "is_live_rest": False,
+                    }
+                )
+                hydrometers.append(item)
+            elif st["sensor"] != "Idro" and not weather_stations:
                 st_temp = round(base_temp - max(0, st["elev_m"] - 20) * 0.0062, 1)
                 item.update(
                     {
@@ -433,32 +618,62 @@ async def fetch_omirl_live_observations(
                         "is_live_rest": False,
                     }
                 )
-            weather_stations.append(item)
+                weather_stations.append(item)
 
-    hydrometers.sort(key=lambda x: x["distance_km"])
     weather_stations.sort(key=lambda x: x["distance_km"])
+    hydrometers.sort(key=lambda x: x["distance_km"])
 
-    # 3. Selezione delle Webcam reali ordinate per distanza dal punto selezionato
+    # 4. Boa Ondametrica Regionale OMIRL (Capo Mele BOACM)
+    buoys_live: list[dict[str, Any]] = []
+    for b_item in bulk.get("Boa", []):
+        if b_item.get("value") is not None:
+            ref_str = str(b_item.get("refDate") or "")
+            buoys_live.append(
+                {
+                    "code": b_item.get("shortCode", "BOACM"),
+                    "name": b_item.get("name", "Boa Capo Mele (OMIRL)"),
+                    "wave_hs_m": round(float(b_item["value"]), 2),
+                    "observed_at": ref_str[11:16] if len(ref_str) >= 16 else now_label,
+                    "is_live_rest": True,
+                }
+            )
+
+    # 5. Webcam Reali con frame fotografico OMIRL quando disponibile (`imgPath`)
+    live_cam_imgs: dict[str, str] = {}
+    for wc_item in bulk.get("webcam", []):
+        c_code = str(wc_item.get("shortCode") or "").upper()
+        img_p = str(wc_item.get("imgPath") or "")
+        if c_code and img_p:
+            live_cam_imgs[c_code] = f"{OMIRL_PUBLIC_HOST}/{img_p.lstrip('/')}"
+
     webcams_sorted = []
     for cam in GENOVA_WEBCAMS_CATALOG:
         c_dist = haversine_km(target_lat, target_lon, cam["lat"], cam["lon"])
+        c_code = cam.get("code", "")
         webcams_sorted.append(
             {
                 **cam,
                 "distance_km": c_dist,
                 "timestamp_label": now_label,
                 "provider": cam.get("source", "Rete Osservativa OMIRL"),
-                "portal_url": cam.get("stream_page_url", "https://omirl.regione.liguria.it"),
+                "portal_url": cam.get("stream_page_url", OMIRL_PUBLIC_HOST),
+                "live_image_url": live_cam_imgs.get(c_code),
             }
         )
     webcams_sorted.sort(key=lambda x: x["distance_km"])
 
     return {
-        "network_name": "Rete Osservativa OMIRL — Regione Liguria / ARPAL",
+        "network_name": "Rete Osservativa OMIRL — Regione Liguria / ARPAL (Live REST)",
         "wms_endpoint": OMIRL_WMS_URL,
-        "nearest_weather_stations": weather_stations[:6],
+        "live_sensors_count": {
+            "wind_stations": len(weather_stations),
+            "river_hydrometers": len(hydrometers),
+            "buoys": len(buoys_live),
+        },
+        "buoys_live": buoys_live,
+        "nearest_weather_stations": weather_stations[:8],
         "all_weather_stations": weather_stations,
-        "nearest_river_hydrometers": hydrometers[:6],
+        "nearest_river_hydrometers": hydrometers[:8],
         "all_river_hydrometers": hydrometers,
         "nearest_webcams": webcams_sorted[:4],
         "all_webcams": webcams_sorted,
@@ -468,11 +683,9 @@ async def fetch_omirl_live_observations(
 async def fetch_metno_compact(
     client: httpx.AsyncClient, lat: float, lon: float
 ) -> dict[str, dict[str, float]]:
-    """Scarica il 5° modello indipendente MET Norway (YR.no / Norwegian Meteorological Institute)
-    e restituisce una mappa indicizzata per ora ISO `YYYY-MM-DDTHH:00` con temp, vento, raffiche e pioggia.
-    """
+    """Scarica il 5° modello indipendente MET Norway (YR.no)."""
     headers = {
-        "User-Agent": "MedioMeteoGenova/1.0 https://github.com/Noobucodonosor/mediometeo"
+        "User-Agent": "MedioMeteoGenova/2.2 https://github.com/Noobucodonosor/mediometeo"
     }
     resp = await client.get(
         METNO_COMPACT_URL,
@@ -488,7 +701,6 @@ async def fetch_metno_compact(
         t_raw = entry.get("time", "")
         if not t_raw:
             continue
-        # Converti in ora locale Europe/Rome approssimata o mantieni prefisso YYYY-MM-DDTHH:00
         hour_key = t_raw[:13] + ":00"
         instant = entry.get("data", {}).get("instant", {}).get("details", {})
         next_1h = entry.get("data", {}).get("next_1_hours", {}).get("details", {})
