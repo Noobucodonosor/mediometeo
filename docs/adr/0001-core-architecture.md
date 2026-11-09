@@ -70,7 +70,7 @@ Il sistema struttura nativamente la Provincia di Genova in **distretti operativi
 
 ## 4. Task Operativi Collegati (con Definition of Done)
 
-- [ ] **TASK-CORE-01**: **Setup struttura progetto Python/FastAPI, configurazione distretti Genova Terra/Mare e database cache SQLite**
+- [x] **TASK-CORE-01**: **Setup struttura progetto Python/FastAPI, configurazione distretti Genova Terra/Mare e database cache SQLite**
   - *File coinvolti*: `requirements.txt`, `.env.example`, `backend/__init__.py`, `backend/config.py`, `backend/districts.py`, `backend/cache.py`, `backend/main.py`
   - *Acceptance Criteria*:
     - Tutti i distretti Terra e Mare della Provincia di Genova sono censiti con coordinate, batimetria/altitudine e zona di allerta ARPAL.
