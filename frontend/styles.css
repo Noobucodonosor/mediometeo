@@ -399,6 +399,11 @@ p, li, .pretty-copy {
   background: #061222;
 }
 
+/* Dark Operational Map Filter for OpenStreetMap base layer (Zero API Key required!) */
+.leaflet-tile-pane .osm-dark-tiles {
+  filter: invert(100%) hue-rotate(185deg) brightness(92%) contrast(92%) saturate(115%);
+}
+
 .map-floating-top {
   position: absolute;
   top: 12px;
@@ -622,6 +627,14 @@ p, li, .pretty-copy {
   height: 100%;
   border-radius: 999px;
   transition: width 0.3s ease;
+}
+
+.hydro-threshold-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2.5px;
+  z-index: 3;
 }
 
 .webcam-grid {

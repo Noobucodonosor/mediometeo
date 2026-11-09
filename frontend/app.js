@@ -83,7 +83,11 @@ async function initApp() {
   await calculateCoastalRoute();
 
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((regs) => regs.forEach((r) => r.update().catch(() => {})))
+      .catch(() => {});
+    navigator.serviceWorker.register("/sw.js?v=2.3").catch(() => {});
   }
 }
 
@@ -338,10 +342,12 @@ function initLeafletMap() {
     zoomControl: true,
   });
 
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    attribution: "&copy; OpenStreetMap &copy; CARTO | MedioMeteo Genova",
+  // Base Map OpenStreetMap Ufficiale (100% Free, Zero API Key) con filtro Dark Sala Operativa
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap contributors | MedioMeteo Genova",
     maxNativeZoom: 18,
     maxZoom: 18,
+    className: "osm-dark-tiles",
   }).addTo(state.map);
 
   // Layer Nautico Ufficiale OpenSeaMap (fari, boe, secche, batimetria portuale)
@@ -349,7 +355,7 @@ function initLeafletMap() {
     attribution: "&copy; OpenSeaMap",
     maxNativeZoom: 17,
     maxZoom: 18,
-    opacity: 0.85,
+    opacity: 0.9,
   }).addTo(state.map);
 
   state.locationsLayerGroup = L.layerGroup().addTo(state.map);
@@ -1201,23 +1207,32 @@ function renderOmirlObservationsAndWebcams(obs, cur, seaCond) {
     })
     .join("");
 
-  // 3. Galleria Webcam Live (Immagine JPEG Live OMIRL o Orizzonte Dinamico SVG Mare/Cielo)
+  // 3. Galleria Webcam Live (Immagine JPEG Live OMIRL o Orizzonte Fisico SVG Mare/Cielo)
   const camGrid = document.getElementById("live-webcams-grid");
   const cams = obs.nearest_webcams || [];
   const hs = seaCond?.waves?.significant_height_m ?? 0.4;
   const windKt = seaCond?.wind?.speed_knots ?? 6;
+  const waveAmp = Math.min(22, Math.max(4, Math.round(hs * 10)));
 
   camGrid.innerHTML = cams
     .map((cam) => {
       const previewStyle = cam.live_image_url
-        ? `background: linear-gradient(180deg, rgba(4,12,24,0.2) 0%, rgba(4,12,24,0.88) 100%), url('${cam.live_image_url}') center/cover no-repeat;`
-        : "";
+        ? `background: linear-gradient(180deg, rgba(4,12,24,0.15) 0%, rgba(4,12,24,0.88) 100%), url('${cam.live_image_url}') center/cover no-repeat;`
+        : `background: linear-gradient(180deg, #0b2444 0%, #071932 58%, #041022 100%);`;
+      const svgBackdrop = cam.live_image_url
+        ? ""
+        : `<svg viewBox="0 0 320 175" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;opacity:0.45;pointer-events:none;">
+            <path d="M0,${115 - waveAmp} Q80,${115 + waveAmp} 160,${115 - waveAmp} T320,${115 - waveAmp} L320,175 L0,175 Z" fill="#0284c7" />
+            <path d="M0,${132 + waveAmp / 2} Q80,${132 - waveAmp} 160,${132 + waveAmp / 2} T320,${132 + waveAmp / 2} L320,175 L0,175 Z" fill="#0369a1" />
+            <circle cx="265" cy="40" r="14" fill="rgba(56,189,248,0.28)" />
+          </svg>`;
       return `
         <div class="webcam-card">
           <div class="webcam-preview" style="${previewStyle}">
+            ${svgBackdrop}
             <div style="display:flex;justify-content:space-between;align-items:center;z-index:2;">
               <span class="badge-pill ${cam.live_image_url ? "level-green" : "level-physics"}">
-                ${cam.live_image_url ? "📷 IMMAGINE LIVE OMIRL" : "📷 STREAM / PORTALE LIVE"}
+                ${cam.live_image_url ? "📷 IMMAGINE LIVE OMIRL" : "📷 TELEMETRIA VISIVA & STREAM"}
               </span>
               <span style="font-size:0.74rem;font-weight:800;color:#38bdf8;background:rgba(4,12,24,0.75);padding:0.1rem 0.45rem;border-radius:999px;">
                 📍 a ${cam.distance_km} km

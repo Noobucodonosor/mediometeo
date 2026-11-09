@@ -463,7 +463,10 @@ if FRONTEND_DIR.exists():
 async def serve_pwa_root():
     index_file = FRONTEND_DIR / "index.html"
     if index_file.exists():
-        return FileResponse(str(index_file))
+        return FileResponse(
+            str(index_file),
+            headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"},
+        )
     return {"message": "MedioMeteo Genova Backend Active. Visit /docs for OpenAPI UI."}
 
 
@@ -472,7 +475,10 @@ async def serve_smartwatch_view():
     """Vista Smartwatch / Polso ad alto contrasto per la navigazione costiera (ADR-0006)."""
     watch_file = FRONTEND_DIR / "orologio.html"
     if watch_file.exists():
-        return FileResponse(str(watch_file))
+        return FileResponse(
+            str(watch_file),
+            headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"},
+        )
     raise HTTPException(status_code=404, detail="Vista Smartwatch /orologio non trovata.")
 
 
@@ -480,7 +486,11 @@ async def serve_smartwatch_view():
 async def serve_manifest():
     manifest_file = FRONTEND_DIR / "manifest.json"
     if manifest_file.exists():
-        return FileResponse(str(manifest_file), media_type="application/manifest+json")
+        return FileResponse(
+            str(manifest_file),
+            media_type="application/manifest+json",
+            headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"},
+        )
     raise HTTPException(status_code=404)
 
 
@@ -488,5 +498,9 @@ async def serve_manifest():
 async def serve_service_worker():
     sw_file = FRONTEND_DIR / "sw.js"
     if sw_file.exists():
-        return FileResponse(str(sw_file), media_type="application/javascript")
+        return FileResponse(
+            str(sw_file),
+            media_type="application/javascript",
+            headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"},
+        )
     raise HTTPException(status_code=404)
