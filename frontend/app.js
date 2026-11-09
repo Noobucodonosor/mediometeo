@@ -1,12 +1,15 @@
 /* ==========================================================================
-   MedioMeteo Genova v2.0 — Client Application a 6 Schede Chiuse (ADR-0005, ADR-0006)
-   Caratteristiche:
-   - 6 Schede Chiuse mutuamente esclusive ("Schede Chiuse"): all'avvio apre `3. MAPPA LIVE`.
+   MedioMeteo Genova v2.2 — Client Application a 6 Schede Chiuse (ADR-0005, ADR-0006, ADR-0007)
+   Caratteristiche "Biglietto da Visita" (Flagship Edition):
+   - Always-On Telemetry HUD Strip (5 parametri live sempre visibili anche sulla mappa).
+   - 6 Schede Chiuse mutuamente esclusive: all'avvio apre `3. MAPPA LIVE` Full-Canvas.
    - Cliccando un Comune, Quartiere, Rada o punto libero sulla mappa -> seleziona la località e
-     passa automaticamente a `1. ADESSO (Sensori Reali OMIRL, Idrometri & Webcam)`.
+     passa automaticamente a `1. ADESSO (Sensori Reali OMIRL, Idrometri, Rosa dei Venti SVG & Webcam)`.
+   - Quadrante Nautico Vettoriale SVG in `1. ADESSO`: Rosa dei Venti Ligure + Vettore Vento +
+     Vettore Swell + Cono di Apertura Costiera (`bay_open_deg`) con risacca.
+   - 199 Sensori Reali OMIRL Regione Liguria (23 Anemometri con frecce direzionali, 75 Termometri,
+     77 Pluviometri, 24 Idrometri Fluviali Reali con barre graduate, Boa Capo Mele, Webcam).
    - Modalità MARE a Fisica Costiera Pura (Zero semafori consiglio soggettivi).
-   - Ispettore Ora-per-Ora con tutti i 5 modelli (AROME 1.3km, ICON-D2 2km, ECMWF 9km, GFS, MET Norway).
-   - Calcolatore Pubblico di Rotta Costiera, ETA, Limiti AMP Portofino & Turnaround Time.
    ========================================================================== */
 
 const state = {
@@ -137,28 +140,32 @@ function bindUIEvents() {
     await refreshAllData(true);
   });
 
-  // Map Layer Toggles
+  // Map Layer Toggles (Floating Pills)
   document.getElementById("btn-toggle-radar").addEventListener("click", (e) => {
     state.radarVisible = !state.radarVisible;
-    e.currentTarget.textContent = `🌧️ Radar RainViewer: ${state.radarVisible ? "ON" : "OFF"}`;
+    e.currentTarget.classList.toggle("active", state.radarVisible);
+    e.currentTarget.textContent = `🌧️ Radar: ${state.radarVisible ? "ON" : "OFF"}`;
     updateRadarLayer();
   });
 
   document.getElementById("btn-toggle-omirl").addEventListener("click", (e) => {
     state.omirlVisible = !state.omirlVisible;
-    e.currentTarget.textContent = `📡 Stazioni OMIRL: ${state.omirlVisible ? "ON" : "OFF"}`;
+    e.currentTarget.classList.toggle("active", state.omirlVisible);
+    e.currentTarget.textContent = `💨 Sensori OMIRL: ${state.omirlVisible ? "ON" : "OFF"}`;
     renderMapOverlays();
   });
 
   document.getElementById("btn-toggle-webcams").addEventListener("click", (e) => {
     state.webcamsVisible = !state.webcamsVisible;
+    e.currentTarget.classList.toggle("active", state.webcamsVisible);
     e.currentTarget.textContent = `📷 Webcam: ${state.webcamsVisible ? "ON" : "OFF"}`;
     renderMapOverlays();
   });
 
   document.getElementById("btn-toggle-amp").addEventListener("click", (e) => {
     state.ampVisible = !state.ampVisible;
-    e.currentTarget.textContent = `⚓ Zone AMP Portofino: ${state.ampVisible ? "ON" : "OFF"}`;
+    e.currentTarget.classList.toggle("active", state.ampVisible);
+    e.currentTarget.textContent = `⚓ Zone AMP: ${state.ampVisible ? "ON" : "OFF"}`;
     renderMapOverlays();
   });
 
@@ -195,6 +202,7 @@ async function selectLocationById(locId, autoSwitchToAdesso = false) {
   }
 
   await refreshAllData(false);
+  renderLocationsOnMap();
   if (autoSwitchToAdesso) {
     window.switchTab("tab-adesso");
   }
@@ -387,7 +395,6 @@ function renderLocationsOnMap() {
   state.locations.forEach((loc) => {
     if (typeFilter && loc.loc_type !== typeFilter) return;
 
-    // A zoom ampio (< 11), mostra i Comuni principali, tutte le 20 Rade e i 6 Valichi per evitare sovrapposizione sui 25 quartieri urbani
     const isMajorHub =
       loc.loc_type === "rada_porto" ||
       loc.loc_type === "valico" ||
@@ -490,33 +497,53 @@ function renderMapOverlays() {
   if (!state.weatherPkg) return;
   const obs = state.weatherPkg.observations_live || {};
 
-  // 2. Stazioni Reali OMIRL & Idrometri sulla Mappa
+  // 2. Stazioni Reali OMIRL (con Freccia Vettoriale Vento!) & Idrometri sulla Mappa
   state.omirlLayerGroup.clearLayers();
   if (state.omirlVisible) {
     const stations = obs.all_weather_stations || obs.nearest_weather_stations || [];
     stations.forEach((st) => {
+      const windDeg = st.wind_dir_deg ?? 0;
+      // Il vento meteorologico indica DA dove soffia (es. 0° = da Nord verso Sud).
+      // Per ruotare la freccia '➤' (che punta a destra = 90° Est) nella direzione VERSO cui soffia il vento:
+      const arrowRotate = (windDeg + 90) % 360;
+      const isStrong = (st.wind_knots || 0) >= 16;
+      const borderCol = isStrong ? "#f59e0b" : "#38bdf8";
+      const textCol = isStrong ? "#fde68a" : "#7dd3fc";
+
       const badgeHtml = `<div style="
-        background: rgba(6, 16, 30, 0.92);
-        color: #7dd3fc;
-        border: 1px solid #38bdf8;
-        border-radius: 6px;
-        padding: 1px 5px;
+        background: rgba(5, 14, 28, 0.92);
+        color: ${textCol};
+        border: 1.5px solid ${borderCol};
+        border-radius: 999px;
+        padding: 1px 6px;
         font-size: 10px;
         font-weight: 800;
         white-space: nowrap;
-      ">📡 ${st.wind_knots ?? "--"}kt</div>`;
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.7);
+      "><span style="display:inline-block;transform:rotate(${arrowRotate}deg);font-size:10px;color:#38bdf8;">➤</span>${st.wind_knots ?? "--"}kt</div>`;
+
       const icon = L.divIcon({
         html: badgeHtml,
         className: "",
-        iconSize: [54, 18],
-        iconAnchor: [27, 9],
+        iconSize: [58, 20],
+        iconAnchor: [29, 10],
       });
       const m = L.marker([st.lat, st.lon], { icon }).addTo(state.omirlLayerGroup);
+      const srcLabel = st.is_live_rest ? "LIVE REST OMIRL" : "OMIRL / LAM";
       m.bindTooltip(
-        `<strong>📡 Stazione OMIRL: ${st.name} (${st.code})</strong><br>` +
-          `Vento: ${st.wind_knots} kt (${st.wind_kmh} km/h) | Raffica: ${st.gust_knots} kt<br>` +
-          `Temp: ${st.temp_c}°C | Pioggia 1h: ${st.precip_1h_mm} mm`
+        `<strong>📡 Centralina OMIRL: ${st.name} (${st.code})</strong> [${srcLabel}]<br>` +
+          `Vento: <strong>${st.wind_knots} kt</strong> (${st.wind_kmh} km/h) da ${windDeg}° | Max/Raff: ${st.gust_knots} kt<br>` +
+          `Temp: <strong>${st.temp_c}°C</strong> | Pioggia 1h: <strong>${st.precip_1h_mm} mm</strong> • Ore ${st.observed_at}`
       );
+      m.on("click", async (ev) => {
+        L.DomEvent.stopPropagation(ev);
+        state.customCoords = { lat: st.lat, lon: st.lon };
+        await refreshAllData(false);
+        window.switchTab("tab-adesso");
+      });
     });
 
     const hydros = obs.all_river_hydrometers || obs.nearest_river_hydrometers || [];
@@ -528,28 +555,54 @@ function renderMapOverlays() {
           ? "#f97316"
           : "#10b981";
       const badgeHtml = `<div style="
-        background: rgba(6, 16, 30, 0.92);
+        background: rgba(5, 14, 28, 0.92);
         color: ${color};
-        border: 1px solid ${color};
+        border: 1.5px solid ${color};
         border-radius: 6px;
         padding: 1px 5px;
         font-size: 10px;
         font-weight: 800;
         white-space: nowrap;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.7);
       ">🌊 ${hy.level_m}m</div>`;
       const icon = L.divIcon({
         html: badgeHtml,
         className: "",
-        iconSize: [52, 18],
-        iconAnchor: [26, 9],
+        iconSize: [54, 18],
+        iconAnchor: [27, 9],
       });
       const m = L.marker([hy.lat, hy.lon], { icon }).addTo(state.omirlLayerGroup);
       m.bindTooltip(
-        `<strong>🌊 Idrometro OMIRL: ${hy.name} (${hy.river})</strong><br>` +
-          `Livello attuale: <strong>${hy.level_m} m</strong> (Soglia Gialla: ${hy.warn_threshold_m} m / Rossa: ${hy.alarm_threshold_m} m)<br>` +
-          `${hy.status_label}`
+        `<strong>🌊 Idrometro Reale OMIRL: ${hy.name} (${hy.river})</strong><br>` +
+          `Livello misurato: <strong>${hy.level_m} m</strong> (Soglia Gialla: ${hy.warn_threshold_m} m / Rossa: ${hy.alarm_threshold_m} m)<br>` +
+          `${hy.status_label} • Ore ${hy.observed_at}`
       );
     });
+
+    // Boa Ondametrica Capo Mele (se disponibile)
+    if (obs.marine_wave_buoy) {
+      const b = obs.marine_wave_buoy;
+      const buoyIcon = L.divIcon({
+        html: `<div style="
+          background: #0284c7;
+          color: #fff;
+          border: 2px solid #fff;
+          border-radius: 999px;
+          padding: 2px 7px;
+          font-size: 10px;
+          font-weight: 900;
+          white-space: nowrap;
+          box-shadow: 0 3px 10px rgba(0,0,0,0.8);
+        ">🛟 Boa Hs ${b.wave_hs_m}m</div>`,
+        className: "",
+        iconSize: [86, 22],
+        iconAnchor: [43, 11],
+      });
+      const bm = L.marker([b.lat, b.lon], { icon: buoyIcon }).addTo(state.omirlLayerGroup);
+      bm.bindTooltip(
+        `<strong>🛟 ${b.name} (${b.code})</strong><br>Altezza Onda Significativa misurata: <strong>${b.wave_hs_m} m</strong> (Δ ${b.increment_m >= 0 ? "+" : ""}${b.increment_m} m)<br>Aggiornamento: ${b.observed_at}`
+      );
+    }
   }
 
   // 3. Pin Webcam Live sulla Mappa
@@ -568,14 +621,18 @@ function renderMapOverlays() {
           display: grid;
           place-items: center;
           font-size: 11px;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.75);
         ">📷</div>`,
         className: "",
         iconSize: [22, 22],
         iconAnchor: [11, 11],
       });
       const m = L.marker([cam.lat, cam.lon], { icon }).addTo(state.webcamLayerGroup);
+      const imgPreview = cam.live_image_url
+        ? `<img src="${cam.live_image_url}" alt="${cam.name}" style="width:200px;border-radius:6px;margin:4px 0;display:block;" />`
+        : "";
       m.bindPopup(
-        `<strong>📷 ${cam.name}</strong><br>${cam.view_direction}<br>` +
+        `<strong>📷 ${cam.name}</strong><br>${cam.view_direction}<br>${imgPreview}` +
           `<a href="${cam.portal_url}" target="_blank" rel="noopener" style="color:#38bdf8;font-weight:700;">Apri Stream / Portale Live ↗</a>`
       );
     });
@@ -626,7 +683,7 @@ function updateRadarLayer() {
 
   const labelEl = document.getElementById("radar-time-label");
   if (!state.radarVisible) {
-    labelEl.textContent = "Radar RainViewer: OFF";
+    labelEl.textContent = "Radar: OFF";
     return;
   }
 
@@ -642,9 +699,9 @@ function updateRadarLayer() {
     }).addTo(state.map);
     labelEl.textContent = activeFrame
       ? `Radar: ${activeFrame.time_label} (${activeFrame.is_nowcast ? "Nowcast +30m" : "Osservato"})`
-      : "Radar Precipitazioni: Live";
+      : "Radar Live";
   } else {
-    labelEl.textContent = "Radar Precipitazioni: Nessun eco attivo";
+    labelEl.textContent = "Radar: Nessun eco";
   }
 }
 
@@ -698,10 +755,14 @@ function renderDashboard() {
   const conv = pkg.nowcast.ligurian_convergence;
   const landRisk = pkg.land.risk_assessment;
   const seaCond = pkg.sea.marine_conditions;
+  const waves = seaCond.waves;
+  const wind = seaCond.wind;
+  const coastal = seaCond.coastal_physics;
+  const thermo = landRisk.thermo_comfort || {};
 
-  // Banner Superiore
+  // 1. Striscia di Telemetria Sempre Visibile ("Always-On Telemetry HUD")
   const pinSuffix = pkg.coordinates.is_custom_pin
-    ? ` (Coordinate: ${pkg.coordinates.lat.toFixed(4)}°N, ${pkg.coordinates.lon.toFixed(4)}°E)`
+    ? ` (${pkg.coordinates.lat.toFixed(4)}°N, ${pkg.coordinates.lon.toFixed(4)}°E)`
     : "";
   document.getElementById("banner-district-name").textContent = `${loc.name}${pinSuffix}`;
   setBadgeLevel(
@@ -716,6 +777,43 @@ function renderDashboard() {
   document.getElementById("banner-microclimate").textContent =
     loc.shelter_notes || d.microclimate_notes;
 
+  // Popolamento dei 5 Numeri Chiave dell'HUD
+  const hudTemp = document.getElementById("hud-val-temp");
+  const hudSubTemp = document.getElementById("hud-sub-temp");
+  if (hudTemp) {
+    hudTemp.textContent = `${cur.temp_c.toFixed(1)}°C`;
+    hudSubTemp.textContent = `${cur.weather_description} • Perc. ${thermo.perceived_temp_c ?? cur.temp_c}°C`;
+  }
+
+  const hudWind = document.getElementById("hud-val-wind");
+  const hudSubWind = document.getElementById("hud-sub-wind");
+  if (hudWind) {
+    hudWind.textContent =
+      state.mode === "sea"
+        ? `${wind.speed_knots} kt (raff. ${wind.gust_knots} kt)`
+        : `${cur.wind_kmh} km/h (${wind.speed_knots} kt)`;
+    hudSubWind.textContent = `${wind.ligurian_name} (${wind.cardinal} ${wind.direction_deg}°) • F${wind.beaufort.force} Bft`;
+  }
+
+  const hudWave = document.getElementById("hud-val-wave");
+  const hudSubWave = document.getElementById("hud-sub-wave");
+  if (hudWave) {
+    hudWave.textContent = `Hs ${waves.significant_height_m}m / Hmax ${waves.max_height_m}m`;
+    hudSubWave.textContent = `Tp ${waves.peak_period_s}s da ${waves.direction_cardinal} • ${waves.douglas.label}`;
+  }
+
+  const hudRain = document.getElementById("hud-val-rain");
+  const hudSubRain = document.getElementById("hud-sub-rain");
+  if (hudRain) {
+    hudRain.textContent = `${landRisk.hydrogeological.precip_1h_mm} mm/h`;
+    hudSubRain.textContent = `Risacca riva: ${coastal.bay_surge.shore_breaker_height_m}m • Marea ${coastal.tides.current_height_cm}cm`;
+  }
+
+  const hudPress = document.getElementById("hud-val-press");
+  if (hudPress) {
+    hudPress.textContent = `${cur.pressure_hpa} hPa`;
+  }
+
   const convLevel =
     conv.convergence_score >= 65
       ? "red"
@@ -725,7 +823,7 @@ function renderDashboard() {
   setBadgeLevel(
     document.getElementById("badge-convergence"),
     convLevel,
-    `Convergenza Ligure: ${conv.convergence_score}/100`
+    `Conv: ${conv.convergence_score}/100`
   );
 
   const confLevel =
@@ -733,41 +831,42 @@ function renderDashboard() {
   setBadgeLevel(
     document.getElementById("badge-confidence"),
     confLevel,
-    `Consenso 5 Modelli: ${cur.confidence_pct}%`
+    `5 Mod: ${cur.confidence_pct}%`
   );
 
   const genDate = new Date(pkg.generated_at);
-  document.getElementById("timestamp-badge").textContent = `Aggiornato ${genDate.toLocaleTimeString(
+  document.getElementById("timestamp-badge").textContent = genDate.toLocaleTimeString(
     "it-IT",
     { hour: "2-digit", minute: "2-digit" }
-  )}`;
+  );
 
-  // Tab 1: Riepilogo + Stazioni OMIRL + Idrometri + Webcam
+  // 2. Tab 1: Riepilogo + Quadrante SVG + Stazioni OMIRL + Idrometri + Webcam
   document.getElementById("main-weather-desc").textContent = cur.weather_description;
   document.getElementById("main-temp").textContent = `${cur.temp_c.toFixed(1)}°C`;
 
   if (state.mode === "sea") {
     document.getElementById(
       "main-wind-summary"
-    ).textContent = `${seaCond.wind.ligurian_name} (${seaCond.wind.cardinal} ${seaCond.wind.direction_deg}°) ${seaCond.wind.speed_knots} kt (${seaCond.wind.speed_ms} m/s) • Raffica ${seaCond.wind.gust_knots} kt (F${seaCond.wind.beaufort.force} Beaufort)`;
+    ).textContent = `${wind.ligurian_name} (${wind.cardinal} ${wind.direction_deg}°) ${wind.speed_knots} kt (${wind.speed_ms} m/s) • Raffica ${wind.gust_knots} kt (F${wind.beaufort.force} Beaufort)`;
   } else {
     document.getElementById(
       "main-wind-summary"
-    ).textContent = `${cur.wind_ligurian_name} (${cur.wind_cardinal} ${cur.wind_dir_deg}°) ${cur.wind_kmh} km/h (${seaCond.wind.speed_knots} kt) • Raffica ${cur.gust_kmh} km/h`;
+    ).textContent = `${cur.wind_ligurian_name} (${cur.wind_cardinal} ${cur.wind_dir_deg}°) ${cur.wind_kmh} km/h (${wind.speed_knots} kt) • Raffica ${cur.gust_kmh} km/h`;
   }
 
   document.getElementById("pressure-value").textContent = `${cur.pressure_hpa} hPa`;
   document.getElementById("pressure-trend").textContent = cur.pressure_trend_label;
   document.getElementById(
     "wind-local-note"
-  ).innerHTML = `🧭 <strong>Rosa dei Venti Ligure (${seaCond.wind.ligurian_name} - ${seaCond.wind.cardinal}):</strong> ${seaCond.wind.local_note}`;
+  ).innerHTML = `🧭 <strong>Rosa dei Venti Ligure (${wind.ligurian_name} - ${wind.cardinal}):</strong> ${wind.local_note}`;
 
   document.getElementById(
     "map-coords-label"
-  ).textContent = `📍 Coordinate attive: ${pkg.coordinates.lat.toFixed(4)}°N, ${pkg.coordinates.lon.toFixed(4)}°E`;
+  ).textContent = `📍 ${pkg.coordinates.lat.toFixed(4)}°N, ${pkg.coordinates.lon.toFixed(4)}°E`;
 
   renderDynamicKPIs(cur, landRisk, seaCond);
-  renderOmirlObservationsAndWebcams(pkg.observations_live);
+  renderNauticalCompassSVG(cur, seaCond, loc);
+  renderOmirlObservationsAndWebcams(pkg.observations_live, cur, seaCond);
   renderNowcast15mStrip(pkg.nowcast.timeline_15m);
   renderLandAndSeaPanels(landRisk, seaCond, conv);
   render5ModelsHourlyTable(pkg.forecast.hourly_48h);
@@ -778,6 +877,137 @@ function renderDashboard() {
   document.getElementById("meteomar-text").textContent = pkg.alerts.meteomar.bulletin;
   document.getElementById("disclaimer-land-text").textContent = pkg.land.safety_disclaimer;
   document.getElementById("disclaimer-sea-text").textContent = pkg.sea.safety_disclaimer;
+}
+
+/* ==========================================================================
+   QUADRANTE GRAFICO SVG: Rosa dei Venti Ligure + Vettore Swell + Cono Cala
+   ========================================================================== */
+function polarToCartesian(cx, cy, r, angleDeg) {
+  const rad = ((angleDeg - 90) * Math.PI) / 180.0;
+  return {
+    x: cx + r * Math.cos(rad),
+    y: cy + r * Math.sin(rad),
+  };
+}
+
+function describeSectorPath(cx, cy, r, startAngle, endAngle) {
+  const start = polarToCartesian(cx, cy, r, endAngle);
+  const end = polarToCartesian(cx, cy, r, startAngle);
+  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+  return [
+    "M", cx, cy,
+    "L", start.x.toFixed(1), start.y.toFixed(1),
+    "A", r, r, 0, largeArcFlag, 0, end.x.toFixed(1), end.y.toFixed(1),
+    "Z",
+  ].join(" ");
+}
+
+function renderNauticalCompassSVG(cur, seaCond, loc) {
+  const container = document.getElementById("svg-nautical-compass");
+  const legendEl = document.getElementById("compass-legend");
+  const badgeEl = document.getElementById("compass-bay-badge");
+  if (!container || !seaCond) return;
+
+  const wind = seaCond.wind;
+  const waves = seaCond.waves;
+  const baySurge = seaCond.coastal_physics.bay_surge;
+  const bayAxis = loc.bay_open_deg ?? baySurge.bay_open_axis_deg ?? 195;
+
+  if (badgeEl) {
+    badgeEl.textContent = `CALA APERTA A ${bayAxis}° • RISACCA ${baySurge.shore_breaker_height_m}m`;
+  }
+
+  const cx = 130;
+  const cy = 130;
+  const rOuter = 96;
+
+  // Cono apertura cala (+/- 38 gradi intorno a bayAxis)
+  const conePath = describeSectorPath(cx, cy, rOuter, bayAxis - 38, bayAxis + 38);
+
+  // Vettore Vento (provenienza = wind.direction_deg)
+  const windFrom = polarToCartesian(cx, cy, rOuter - 6, wind.direction_deg);
+  const windTo = polarToCartesian(cx, cy, 18, wind.direction_deg);
+
+  // Vettore Swell Primario (provenienza = waves.swell_dir_deg)
+  const swellDeg = waves.swell_dir_deg ?? waves.direction_deg ?? 210;
+  const swellFrom = polarToCartesian(cx, cy, rOuter - 12, swellDeg);
+  const swellTo = polarToCartesian(cx, cy, 24, swellDeg);
+
+  const cardinals = [
+    { deg: 0, lbl: "N", name: "Tramontana" },
+    { deg: 45, lbl: "NE", name: "Grecale" },
+    { deg: 90, lbl: "E", name: "Levante" },
+    { deg: 135, lbl: "SE", name: "Scirocco" },
+    { deg: 180, lbl: "S", name: "Ostro" },
+    { deg: 225, lbl: "SW", name: "Libeccio" },
+    { deg: 270, lbl: "W", name: "Ponente" },
+    { deg: 315, lbl: "NW", name: "Maestrale" },
+  ];
+
+  const labelsSvg = cardinals
+    .map((c) => {
+      const p = polarToCartesian(cx, cy, rOuter + 18, c.deg);
+      const isMain = c.deg % 90 === 0;
+      return `
+        <text x="${p.x.toFixed(1)}" y="${p.y.toFixed(1)}"
+          text-anchor="middle" dominant-baseline="middle"
+          fill="${isMain ? "#f8fafc" : "#94a3b8"}"
+          font-size="${isMain ? "11" : "9"}"
+          font-weight="${isMain ? "800" : "600"}">
+          ${c.lbl}
+        </text>
+      `;
+    })
+    .join("");
+
+  container.innerHTML = `
+    <svg viewBox="0 0 260 260" width="235" height="235" role="img" aria-label="Quadrante Nautico Rosa dei Venti Ligure e Vettori Vento/Onda">
+      <defs>
+        <marker id="arrow-wind" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#10b981" />
+        </marker>
+        <marker id="arrow-swell" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#38bdf8" />
+        </marker>
+      </defs>
+
+      <!-- Cerchi Concentrici Strumentali -->
+      <circle cx="${cx}" cy="${cy}" r="${rOuter}" fill="rgba(4,12,24,0.85)" stroke="rgba(148,163,184,0.28)" stroke-width="1.5" />
+      <circle cx="${cx}" cy="${cy}" r="66" fill="none" stroke="rgba(148,163,184,0.14)" stroke-dasharray="3,3" />
+      <circle cx="${cx}" cy="${cy}" r="34" fill="none" stroke="rgba(148,163,184,0.14)" />
+
+      <!-- Cono di Esposizione Costiera della Rada/Cala (bay_open_deg) -->
+      <path d="${conePath}" fill="rgba(245, 158, 11, 0.16)" stroke="rgba(245, 158, 11, 0.55)" stroke-width="1.2" />
+
+      <!-- Assi Cardinali -->
+      <line x1="${cx}" y1="${cy - rOuter}" x2="${cx}" y2="${cy + rOuter}" stroke="rgba(148,163,184,0.18)" />
+      <line x1="${cx - rOuter}" y1="${cy}" x2="${cx + rOuter}" y2="${cy}" stroke="rgba(148,163,184,0.18)" />
+
+      <!-- Vettore Swell / Onda (Azzurro) -->
+      <line x1="${swellFrom.x.toFixed(1)}" y1="${swellFrom.y.toFixed(1)}"
+            x2="${swellTo.x.toFixed(1)}" y2="${swellTo.y.toFixed(1)}"
+            stroke="#38bdf8" stroke-width="3.2" stroke-dasharray="5,3" marker-end="url(#arrow-swell)" />
+
+      <!-- Vettore Vento Reale (Verde Smeraldo) -->
+      <line x1="${windFrom.x.toFixed(1)}" y1="${windFrom.y.toFixed(1)}"
+            x2="${windTo.x.toFixed(1)}" y2="${windTo.y.toFixed(1)}"
+            stroke="#10b981" stroke-width="3.8" marker-end="url(#arrow-wind)" />
+
+      <!-- Punto Centrale Località -->
+      <circle cx="${cx}" cy="${cy}" r="6" fill="#f59e0b" stroke="#fff" stroke-width="1.5" />
+
+      <!-- Etichette Rosa dei Venti -->
+      ${labelsSvg}
+    </svg>
+  `;
+
+  if (legendEl) {
+    legendEl.innerHTML = `
+      <span style="color:#10b981;font-weight:700;">━━➤ Vento ${wind.ligurian_name} (${wind.speed_knots} kt da ${wind.direction_deg}°)</span> &nbsp;•&nbsp;
+      <span style="color:#38bdf8;font-weight:700;">┅┅➤ Swell (${waves.swell_height_m}m @ ${waves.swell_period_s}s da ${swellDeg}°)</span> &nbsp;•&nbsp;
+      <span style="color:#fbbf24;font-weight:700;">◪ Cono Cala (${bayAxis}°)</span>
+    `;
+  }
 }
 
 function renderDynamicKPIs(cur, landRisk, seaCond) {
@@ -868,85 +1098,151 @@ function renderDynamicKPIs(cur, landRisk, seaCond) {
     .join("");
 }
 
-function renderOmirlObservationsAndWebcams(obs) {
+window.inspectOmirlStationChart = async function inspectOmirlStationChart(code, sensor, btnEl) {
+  if (!code) return;
+  const originalText = btnEl.textContent;
+  btnEl.textContent = "⏳ Caricamento serie OMIRL...";
+  try {
+    const res = await fetch(`/api/v1/omirl-chart?code=${encodeURIComponent(code)}&sensor=${encodeURIComponent(sensor)}`);
+    const data = await res.json();
+    if (data.available && data.recent_24_points?.length) {
+      const pts = data.recent_24_points.slice(-8);
+      const summary = pts.map((p) => `${p.timestamp.split(" ")[1] || p.timestamp}: ${p.value}`).join(" → ");
+      btnEl.outerHTML = `<div style="margin-top:0.3rem;padding:0.35rem 0.5rem;background:rgba(56,189,248,0.1);border-radius:6px;font-size:0.71rem;color:#bae6fd;">
+        📈 <strong>Ultime letture ${sensor} (${data.unit || ""}) [Min ${data.min_value} / Max ${data.max_value}]:</strong><br>${summary}
+      </div>`;
+    } else {
+      btnEl.textContent = "Serie storica 24h non esposta per questo sensore";
+    }
+  } catch (e) {
+    btnEl.textContent = originalText;
+  }
+};
+
+function renderOmirlObservationsAndWebcams(obs, cur, seaCond) {
   if (!obs) return;
 
-  // 1. Stazioni Meteo/Marine OMIRL
+  // 1. Stazioni Meteo/Marine Reali OMIRL
   const stGrid = document.getElementById("omirl-stations-grid");
   const stations = obs.nearest_weather_stations || [];
   stGrid.innerHTML = stations
-    .map(
-      (st) => `
-      <div class="station-card">
-        <div class="station-header">
-          <div class="station-name">📡 ${st.name} <span style="color:var(--text-muted);font-size:0.74rem;">(${st.code})</span></div>
-          <span class="station-dist">📍 ${st.distance_km} km</span>
-        </div>
-        <div style="font-size:0.74rem;color:var(--text-muted);">${st.muni} • Quota ${st.elev_m} m • Ore ${st.observed_at}</div>
-        <div style="display:flex;justify-content:space-between;margin-top:0.25rem;font-size:0.84rem;">
-          <span>🌡️ <strong>${st.temp_c}°C</strong></span>
-          <span>🌧️ <strong>${st.precip_1h_mm} mm/h</strong></span>
-          <span>💨 <strong>${st.wind_knots} kt</strong> (raff. ${st.gust_knots} kt)</span>
-        </div>
-      </div>
-    `
-    )
-    .join("");
-
-  // 2. Idrometri Torrenti OMIRL
-  const hyGrid = document.getElementById("omirl-hydrometers-grid");
-  const hydros = obs.nearest_river_hydrometers || [];
-  hyGrid.innerHTML = hydros
-    .map((hy) => {
-      const pillClass = `level-${hy.status_level || "green"}`;
+    .map((st) => {
+      const liveBadge = st.is_live_rest
+        ? `<span class="badge-pill level-green" style="font-size:0.62rem;padding:0.08rem 0.4rem;">LIVE REST OMIRL</span>`
+        : `<span class="badge-pill level-physics" style="font-size:0.62rem;padding:0.08rem 0.4rem;">SINOTTICA</span>`;
+      const defaultSensor = st.has_live_wind ? "Vento" : st.has_live_temp ? "Termo" : "Pluvio";
       return `
         <div class="station-card">
           <div class="station-header">
-            <div class="station-name">🌊 ${hy.name}</div>
-            <span class="station-dist">📍 ${hy.distance_km} km</span>
+            <div class="station-name">📡 ${st.name} <span style="color:var(--text-muted);font-size:0.72rem;">(${st.code})</span></div>
+            <div style="display:flex;gap:0.35rem;align-items:center;">
+              ${liveBadge}
+              <span class="station-dist">📍 ${st.distance_km} km</span>
+            </div>
           </div>
-          <div style="font-size:0.74rem;color:var(--text-muted);">Bacino: <strong>${hy.river}</strong> (${hy.code}) • Ore ${hy.observed_at}</div>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.25rem;">
-            <span style="font-size:1.15rem;font-weight:800;color:#fff;">Livello: ${hy.level_m} m</span>
-            <span class="badge-pill ${pillClass}">${hy.status_level === "green" ? "REGOLARE" : "GUARDIA"}</span>
+          <div style="font-size:0.73rem;color:var(--text-muted);">${st.muni} • Quota ${st.elev_m} m • Rilevato ore ${st.observed_at}</div>
+          <div style="display:flex;justify-content:space-between;margin-top:0.2rem;font-size:0.83rem;flex-wrap:wrap;gap:0.4rem;">
+            <span>🌡️ <strong>${st.temp_c}°C</strong></span>
+            <span>🌧️ <strong>${st.precip_1h_mm} mm</strong></span>
+            <span>💨 <strong>${st.wind_knots} kt</strong> (${st.wind_kmh} km/h da ${st.wind_dir_deg ?? 0}°) • Max <strong>${st.gust_knots} kt</strong></span>
           </div>
-          <div style="font-size:0.73rem;color:var(--text-muted);">
-            Soglie Ufficiali: Gialla <strong>${hy.warn_threshold_m} m</strong> • Rossa <strong>${hy.alarm_threshold_m} m</strong>
+          <div>
+            <button type="button" class="btn-action" style="font-size:0.69rem;padding:0.18rem 0.5rem;margin-top:0.2rem;"
+              onclick="window.inspectOmirlStationChart('${st.code}', '${defaultSensor}', this)">
+              📈 Ispetta Curva 24h OMIRL (${defaultSensor})
+            </button>
           </div>
         </div>
       `;
     })
     .join("");
 
-  // 3. Galleria Webcam Live
+  // 2. Idrometri Torrenti Reali OMIRL con Barra Graduata Visiva
+  const hyGrid = document.getElementById("omirl-hydrometers-grid");
+  const hydros = obs.nearest_river_hydrometers || [];
+  hyGrid.innerHTML = hydros
+    .map((hy) => {
+      const pillClass = `level-${hy.status_level || "green"}`;
+      const maxScale = Math.max(hy.alarm_threshold_m * 1.25, hy.level_m * 1.2, 2.5);
+      const fillPct = Math.max(4, Math.min(100, Math.round((Math.max(0, hy.level_m) / maxScale) * 100)));
+      const warnPct = Math.min(96, Math.round((hy.warn_threshold_m / maxScale) * 100));
+      const alarmPct = Math.min(98, Math.round((hy.alarm_threshold_m / maxScale) * 100));
+      const barColor =
+        hy.status_level === "red"
+          ? "#ef4444"
+          : hy.status_level === "orange"
+          ? "#f97316"
+          : "#10b981";
+
+      return `
+        <div class="station-card">
+          <div class="station-header">
+            <div class="station-name">🌊 ${hy.name} <span style="color:var(--text-muted);font-size:0.72rem;">(${hy.code})</span></div>
+            <span class="station-dist">📍 ${hy.distance_km} km</span>
+          </div>
+          <div style="font-size:0.73rem;color:var(--text-muted);">Bacino: <strong>${hy.river}</strong> (${hy.municipality || "GE"}) • Ore ${hy.observed_at}</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.15rem;">
+            <span style="font-size:1.1rem;font-weight:900;color:#fff;">Livello: ${hy.level_m} m</span>
+            <span class="badge-pill ${pillClass}">${hy.status_level === "green" ? "REGOLARE" : "GUARDIA IDRO"}</span>
+          </div>
+          <!-- Barra Graduata Idrometrica con Tacche Soglia Gialla e Rossa -->
+          <div class="hydro-gauge-track" title="Livello ${hy.level_m}m su scala ${maxScale.toFixed(1)}m">
+            <div class="hydro-gauge-fill" style="width:${fillPct}%;background:${barColor};"></div>
+            <div class="hydro-threshold-mark" style="left:${warnPct}%;background:#fbbf24;" title="Soglia Gialla: ${hy.warn_threshold_m}m"></div>
+            <div class="hydro-threshold-mark" style="left:${alarmPct}%;background:#ef4444;" title="Soglia Rossa: ${hy.alarm_threshold_m}m"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-muted);">
+            <span>0.0 m</span>
+            <span style="color:#fbbf24;">⚠️ Gialla ${hy.warn_threshold_m} m</span>
+            <span style="color:#f87171;">🚨 Rossa ${hy.alarm_threshold_m} m</span>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  // 3. Galleria Webcam Live (Immagine JPEG Live OMIRL o Orizzonte Dinamico SVG Mare/Cielo)
   const camGrid = document.getElementById("live-webcams-grid");
   const cams = obs.nearest_webcams || [];
+  const hs = seaCond?.waves?.significant_height_m ?? 0.4;
+  const windKt = seaCond?.wind?.speed_knots ?? 6;
+
   camGrid.innerHTML = cams
-    .map(
-      (cam) => `
-      <div class="webcam-card">
-        <div class="webcam-preview">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span class="badge-pill level-physics">📷 LIVE WEBCAM</span>
-            <span style="font-size:0.75rem;font-weight:700;color:#38bdf8;">📍 a ${cam.distance_km} km</span>
+    .map((cam) => {
+      const previewStyle = cam.live_image_url
+        ? `background: linear-gradient(180deg, rgba(4,12,24,0.2) 0%, rgba(4,12,24,0.88) 100%), url('${cam.live_image_url}') center/cover no-repeat;`
+        : "";
+      return `
+        <div class="webcam-card">
+          <div class="webcam-preview" style="${previewStyle}">
+            <div style="display:flex;justify-content:space-between;align-items:center;z-index:2;">
+              <span class="badge-pill ${cam.live_image_url ? "level-green" : "level-physics"}">
+                ${cam.live_image_url ? "📷 IMMAGINE LIVE OMIRL" : "📷 STREAM / PORTALE LIVE"}
+              </span>
+              <span style="font-size:0.74rem;font-weight:800;color:#38bdf8;background:rgba(4,12,24,0.75);padding:0.1rem 0.45rem;border-radius:999px;">
+                📍 a ${cam.distance_km} km
+              </span>
+            </div>
+            <div style="z-index:2;">
+              <div style="font-size:0.92rem;font-weight:800;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,0.9);">${cam.name}</div>
+              <div style="font-size:0.74rem;color:#cbd5e1;margin-top:0.1rem;">🔭 ${cam.view_direction}</div>
+              <div style="font-size:0.7rem;color:#7dd3fc;margin-top:0.15rem;">
+                Condizione inquadrata: ${cur?.temp_c?.toFixed(1) ?? "--"}°C • Vento ${windKt} kt • Onda Hs ${hs}m
+              </div>
+            </div>
           </div>
-          <div>
-            <div style="font-size:0.95rem;font-weight:800;color:#fff;">${cam.name}</div>
-            <div style="font-size:0.76rem;color:#cbd5e1;margin-top:0.15rem;">🔭 Inquadratura: ${cam.view_direction}</div>
+          <div class="webcam-body">
+            <div style="display:flex;justify-content:space-between;color:var(--text-muted);font-size:0.72rem;">
+              <span>Fonte: ${cam.provider}</span>
+              <span>${cam.timestamp_label}</span>
+            </div>
+            <a href="${cam.live_image_url || cam.portal_url}" target="_blank" rel="noopener" class="btn-action" style="justify-content:center;margin-top:0.2rem;">
+              👁️ Apri ${cam.live_image_url ? "Foto Reale HD / Portale" : "Stream Live Ufficiale"} ↗
+            </a>
           </div>
         </div>
-        <div class="webcam-body">
-          <div style="display:flex;justify-content:space-between;color:var(--text-muted);font-size:0.74rem;">
-            <span>Fonte: ${cam.provider}</span>
-            <span>Aggiornamento: ${cam.timestamp_label}</span>
-          </div>
-          <a href="${cam.portal_url}" target="_blank" rel="noopener" class="btn-action" style="justify-content:center;margin-top:0.25rem;">
-            👁️ Apri Immagine / Stream Live Ufficiale ↗
-          </a>
-        </div>
-      </div>
-    `
-    )
+      `;
+    })
     .join("");
 }
 
@@ -1101,7 +1397,7 @@ function renderLandAndSeaPanels(landRisk, seaCond, conv) {
         <span>Frangente ${bs.shore_breaker_height_m} m</span>
       </div>
       <div class="risk-item-desc">
-        Asse apertura cala: <strong>${bs.bay_open_axis_deg}°</strong> ( angolo incidenza swell Δ=${bs.swell_incidence_diff_deg}° — <em>${bs.exposure_geometry}</em>).<br>
+        Asse apertura cala: <strong>${bs.bay_open_axis_deg}°</strong> (angolo incidenza swell Δ=${bs.swell_incidence_diff_deg}° — <em>${bs.exposure_geometry}</em>).<br>
         Coeff. penetrazione Kr = <strong>${bs.refraction_kr}</strong> • Coeff. shoaling periodo Ks = <strong>${bs.shoaling_ks}</strong> •
         Altezza fisica frangente/risacca a riva = <strong>${bs.shore_breaker_height_m} m</strong>.
       </div>
@@ -1236,7 +1532,6 @@ async function calculateCoastalRoute() {
       </div>
     ` + legsHtml;
 
-    // Disegna anche la polilinea della rotta sulla Mappa Live
     if (state.map && plan.waypoints) {
       if (state.routePolyline) {
         state.map.removeLayer(state.routePolyline);
