@@ -102,7 +102,10 @@ function bindUIEvents() {
   const searchInput = document.getElementById("loc-search-input");
   const selectLoc = document.getElementById("district-select");
 
-  typeFilter.addEventListener("change", () => populateLocationSelect());
+  typeFilter.addEventListener("change", () => {
+    populateLocationSelect();
+    renderLocationsOnMap();
+  });
   searchInput.addEventListener("input", () => populateLocationSelect());
 
   selectLoc.addEventListener("change", async (e) => {
@@ -329,7 +332,16 @@ function initLeafletMap() {
 
   L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
     attribution: "&copy; OpenStreetMap &copy; CARTO | MedioMeteo Genova",
+    maxNativeZoom: 18,
     maxZoom: 18,
+  }).addTo(state.map);
+
+  // Layer Nautico Ufficiale OpenSeaMap (fari, boe, secche, batimetria portuale)
+  L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenSeaMap",
+    maxNativeZoom: 17,
+    maxZoom: 18,
+    opacity: 0.85,
   }).addTo(state.map);
 
   state.locationsLayerGroup = L.layerGroup().addTo(state.map);
@@ -338,6 +350,7 @@ function initLeafletMap() {
   state.webcamLayerGroup = L.layerGroup().addTo(state.map);
 
   renderLocationsOnMap();
+  state.map.on("zoomend", () => renderLocationsOnMap());
 
   // Click libero sulla Mappa Live -> seleziona coordinata e passa automaticamente a 1. ADESSO (ADR-0006)
   state.map.on("click", async (ev) => {
@@ -368,7 +381,41 @@ function renderLocationsOnMap() {
   if (!state.map || !state.locationsLayerGroup) return;
   state.locationsLayerGroup.clearLayers();
 
+  const currentZoom = state.map.getZoom() || 10;
+  const typeFilter = document.getElementById("loc-type-filter")?.value || "";
+
   state.locations.forEach((loc) => {
+    if (typeFilter && loc.loc_type !== typeFilter) return;
+
+    // A zoom ampio (< 11), mostra i Comuni principali, tutte le 20 Rade e i 6 Valichi per evitare sovrapposizione sui 25 quartieri urbani
+    const isMajorHub =
+      loc.loc_type === "rada_porto" ||
+      loc.loc_type === "valico" ||
+      loc.id === state.selectedLocationId ||
+      [
+        "COM-GENOVA",
+        "COM-ARENZANO",
+        "COM-COGOLETO",
+        "COM-CAMPO-LIGURE",
+        "COM-BUSALLA",
+        "COM-TORRIGLIA",
+        "COM-RECCO",
+        "COM-CAMOGLI",
+        "COM-PORTOFINO",
+        "COM-SANTA-MARGHERITA-LIGURE",
+        "COM-RAPALLO",
+        "COM-CHIAVARI",
+        "COM-LAVAGNA",
+        "COM-SESTRI-LEVANTE",
+        "COM-MONEGLIA",
+        "COM-SANTO-STEFANO-D-AVETO",
+      ].includes(loc.id);
+
+    if (!typeFilter && currentZoom < 11 && !isMajorHub) {
+      return;
+    }
+
+    const isSelected = loc.id === state.selectedLocationId;
     const colorMap = {
       comune: "#10b981",
       quartiere: "#34d399",
@@ -381,22 +428,22 @@ function renderLocationsOnMap() {
       rada_porto: "⚓",
       valico: "⛰️",
     };
-    const bg = colorMap[loc.loc_type] || "#10b981";
+    const bg = isSelected ? "#f59e0b" : colorMap[loc.loc_type] || "#10b981";
     const sym = symbolMap[loc.loc_type] || "📍";
-    const size = loc.loc_type === "rada_porto" || loc.id === "COM-GENOVA" ? 26 : 21;
+    const size = isSelected ? 30 : loc.loc_type === "rada_porto" || loc.id === "COM-GENOVA" ? 25 : 21;
 
     const icon = L.divIcon({
       html: `<div style="
         background: ${bg};
         color: #fff;
-        border: 1.5px solid #fff;
+        border: ${isSelected ? "2.5px solid #fff" : "1.5px solid rgba(255,255,255,0.85)"};
         border-radius: 999px;
         width: ${size}px;
         height: ${size}px;
         display: grid;
         place-items: center;
-        font-size: ${size > 22 ? 13 : 10}px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.65);
+        font-size: ${size > 23 ? 13 : 10}px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.75);
       ">${sym}</div>`,
       className: "",
       iconSize: [size, size],
@@ -412,7 +459,6 @@ function renderLocationsOnMap() {
       `<strong>${loc.name}</strong> (${loc.loc_type.toUpperCase()})<br>${loc.valley_or_sector}${bayNote}<br><em>Clicca per aprire 1. 📡 ADESSO</em>`
     );
 
-    // Regola /grill-me #14: Cliccando un Comune/Quartiere/Rada sulla Mappa Live -> seleziona e apre 1. ADESSO
     marker.on("click", async (ev) => {
       L.DomEvent.stopPropagation(ev);
       await selectLocationById(loc.id, true);
@@ -585,12 +631,14 @@ function updateRadarLayer() {
   }
 
   const activeFrame = frames[state.radarFrameIndex] || frames[frames.length - 1];
-  const tileUrl = activeFrame?.tile_url || radar.latest_tile_url;
+  const tileUrl = activeFrame?.tile_url || activeFrame?.tile_url_template || radar.latest_tile_url;
 
   if (tileUrl) {
     state.radarLayer = L.tileLayer(tileUrl, {
-      opacity: 0.64,
+      opacity: 0.62,
       zIndex: 450,
+      maxNativeZoom: 7,
+      maxZoom: 18,
     }).addTo(state.map);
     labelEl.textContent = activeFrame
       ? `Radar: ${activeFrame.time_label} (${activeFrame.is_nowcast ? "Nowcast +30m" : "Osservato"})`

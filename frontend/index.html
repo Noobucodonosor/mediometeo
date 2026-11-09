@@ -13,7 +13,7 @@
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     crossorigin=""
   />
-  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/styles.css?v=2.1">
 </head>
 <body>
   <!-- Topbar Operativa -->
@@ -77,22 +77,22 @@
   <!-- Barra delle 6 Schede Chiuse Mutuamente Esclusive (ADR-0006 — Default all'avvio: Tab 3 MAPPA LIVE) -->
   <nav class="tabs-nav" role="tablist" aria-label="Sezioni Sala Operativa MedioMeteo Genova">
     <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-adesso" id="btn-tab-adesso">
-      1. 📡 ADESSO (Sensori OMIRL & Webcam)
+      1. 📡 ADESSO (OMIRL & Cam)
     </button>
     <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-nowcast" id="btn-tab-nowcast">
       2. ⏱️ NOWCAST 0-3h & FISICA
     </button>
     <button type="button" class="tab-btn active" role="tab" aria-selected="true" data-tab="tab-mappa" id="btn-tab-mappa">
-      3. 🗺️ MAPPA LIVE (67 Comuni, Radar & Rade)
+      3. 🗺️ MAPPA LIVE
     </button>
     <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-modelli" id="btn-tab-modelli">
-      4. 📊 FORECAST & 5 MODELLI
+      4. 📊 5 MODELLI & 7GG
     </button>
     <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-rotta" id="btn-tab-rotta">
-      5. 🧭 ROTTA, ETA & SMARTWATCH
+      5. 🧭 ROTTA & ETA
     </button>
     <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-bollettini" id="btn-tab-bollettini">
-      6. 📜 BOLLETTINI (ARPAL, Meteomar & AI)
+      6. 📜 BOLLETTINI & AI
     </button>
   </nav>
 
@@ -446,6 +446,6 @@
   <!-- Librerie esterne CDN con fallback graceful -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=2.1"></script>
 </body>
 </html>

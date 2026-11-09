@@ -1,8 +1,9 @@
-const CACHE_NAME = "mediometeo-genova-v1";
+const CACHE_NAME = "mediometeo-genova-v2.1";
+const LEGACY_TAG = "mediometeo-genova-v1";
 const STATIC_ASSETS = [
   "/",
-  "/static/styles.css",
-  "/static/app.js",
+  "/static/styles.css?v=2.1",
+  "/static/app.js?v=2.1",
   "/manifest.json"
 ];
 
@@ -22,15 +23,15 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+// Network-first strategy so live code updates are always served immediately
 self.addEventListener("fetch", (event) => {
-  const url = new URL(event.request.url);
-  if (url.pathname.startsWith("/api/")) {
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match(event.request))
-    );
-    return;
-  }
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    fetch(event.request)
+      .then((res) => {
+        const clone = res.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone)).catch(() => {});
+        return res;
+      })
+      .catch(() => caches.match(event.request))
   );
 });

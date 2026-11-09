@@ -114,6 +114,7 @@ async def fetch_rainviewer_radar(client: httpx.AsyncClient) -> dict[str, Any]:
             "timestamp": ts,
             "time_label": dt_str,
             "is_nowcast": is_nowcast,
+            "tile_url": f"{host}{path}/256/{{z}}/{{x}}/{{y}}/2/1_1.png",
             "tile_url_template": f"{host}{path}/256/{{z}}/{{x}}/{{y}}/2/1_1.png",
         }
 
