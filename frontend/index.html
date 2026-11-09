@@ -6,9 +6,8 @@
   <!-- MANDATORY per modern-web-guidance (dark-mode): Declare support for dark and light themes -->
   <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="#06101e">
-  <title>MedioMeteo Genova — Nowcast & Forecast Terra / Mare</title>
+  <title>MedioMeteo Genova — Sala Operativa Terra & Mare (67 Comuni, OMIRL, 5 Modelli & Fisica Costiera)</title>
   <link rel="manifest" href="/manifest.json">
-  <!-- Leaflet CSS per Mappa Radar & Nautica -->
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -23,7 +22,7 @@
       <div class="brand-badge" aria-hidden="true">⚓</div>
       <div>
         <div class="brand-title">MedioMeteo Genova</div>
-        <div class="brand-subtitle">AROME 1.3km • ICON-D2 2km • ECMWF • Marine & Radar Nowcast</div>
+        <div class="brand-subtitle">67 Comuni • 25 Quartieri • 20 Rade • OMIRL Live • 5 Modelli (AROME/ICON-D2/ECMWF/GFS/MET.no)</div>
       </div>
     </div>
 
@@ -31,179 +30,414 @@
       <!-- Switch Dual-Mode TERRA / MARE -->
       <div class="mode-switch" role="group" aria-label="Modalità operativa Terra o Mare">
         <button id="btn-mode-land" type="button" class="mode-btn active-land">
-          🏔️ TERRA (Genova & Vallate)
+          🏔️ TERRA
         </button>
         <button id="btn-mode-sea" type="button" class="mode-btn">
-          🌊 MARE (Porto & Golfo Ligure)
+          🌊 MARE (Fisica Pura)
         </button>
       </div>
 
-      <!-- Selettore Distretto -->
-      <select id="district-select" class="select-district" aria-label="Seleziona distretto Provincia di Genova">
-        <option value="GE-CENTRO-PONENTE">Caricamento distretti...</option>
+      <!-- Filtro Categoria Geografica -->
+      <select id="loc-type-filter" class="select-filter" aria-label="Filtra tipo località">
+        <option value="">Tutte le 118 località</option>
+        <option value="comune">🏛️ 67 Comuni Prov. GE</option>
+        <option value="quartiere">🏙️ 25 Quartieri Genova</option>
+        <option value="rada_porto">⚓ 20 Rade, Porti & Capi</option>
+        <option value="valico">⛰️ 6 Valichi Appennino</option>
       </select>
 
-      <button id="btn-refresh" type="button" class="btn-action" title="Aggiorna dati real-time">
-        🔄 Aggiorna Live
+      <!-- Ricerca Istantanea -->
+      <input
+        id="loc-search-input"
+        type="search"
+        class="search-input"
+        placeholder="🔍 Cerca comune, quartiere, rada..."
+        aria-label="Cerca tra i 67 Comuni, Quartieri o Rade"
+      />
+
+      <!-- Selettore Località Granulare (118 voci) -->
+      <select id="district-select" class="select-district" aria-label="Seleziona località Provincia di Genova">
+        <option value="COM-GENOVA">Caricamento 118 località...</option>
+      </select>
+
+      <button id="btn-gps" type="button" class="btn-action" title="Usa posizione GPS">
+        📍 GPS
       </button>
+
+      <button id="btn-refresh" type="button" class="btn-action" title="Aggiorna dati real-time">
+        🔄 Live
+      </button>
+
+      <a href="/orologio" class="btn-action" title="Apri Vista Smartwatch da Polso">
+        ⌚ Orologio
+      </a>
     </div>
   </header>
 
+  <!-- Barra delle 6 Schede Chiuse Mutuamente Esclusive (ADR-0006 — Default all'avvio: Tab 3 MAPPA LIVE) -->
+  <nav class="tabs-nav" role="tablist" aria-label="Sezioni Sala Operativa MedioMeteo Genova">
+    <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-adesso" id="btn-tab-adesso">
+      1. 📡 ADESSO (Sensori OMIRL & Webcam)
+    </button>
+    <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-nowcast" id="btn-tab-nowcast">
+      2. ⏱️ NOWCAST 0-3h & FISICA
+    </button>
+    <button type="button" class="tab-btn active" role="tab" aria-selected="true" data-tab="tab-mappa" id="btn-tab-mappa">
+      3. 🗺️ MAPPA LIVE (67 Comuni, Radar & Rade)
+    </button>
+    <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-modelli" id="btn-tab-modelli">
+      4. 📊 FORECAST & 5 MODELLI
+    </button>
+    <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-rotta" id="btn-tab-rotta">
+      5. 🧭 ROTTA, ETA & SMARTWATCH
+    </button>
+    <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-bollettini" id="btn-tab-bollettini">
+      6. 📜 BOLLETTINI (ARPAL, Meteomar & AI)
+    </button>
+  </nav>
+
   <main class="container">
-    <!-- Banner Stato Sinottico, Convergenza Ligure & Allerte -->
+    <!-- Banner Stato Sinottico & Località Selezionata (Sempre visibile sopra la scheda attiva) -->
     <section id="alert-banner" class="alert-banner" aria-live="polite">
       <div>
-        <strong id="banner-district-name">Genova Centro, Porto Antico & Ponente Urbano</strong>
-        <span id="banner-zone-tag" class="badge-pill level-green" style="margin-left: 0.5rem;">Zona B</span>
-        <p id="banner-microclimate" class="pretty-copy" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;">
-          Caricamento in corso del motore multi-modello...
+        <strong id="banner-district-name" style="font-size: 1.02rem;">Genova (Comune Capoluogo)</strong>
+        <span id="banner-zone-tag" class="badge-pill level-green" style="margin-left: 0.45rem;">Zona B</span>
+        <span id="banner-type-tag" class="badge-pill level-physics" style="margin-left: 0.35rem;">COMUNE</span>
+        <p id="banner-microclimate" class="pretty-copy" style="font-size: 0.79rem; color: var(--text-muted); margin-top: 0.2rem;">
+          Seleziona un punto sulla Mappa Live o dal menu per ispezionare sensori reali OMIRL, Nowcast 0-3h e 5 modelli.
         </p>
       </div>
-      <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
-        <span id="badge-convergence" class="badge-pill level-green">Convergenza: Verifica...</span>
-        <span id="badge-confidence" class="badge-pill level-green">Confidenza LAM: --%</span>
+      <div style="display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center;">
+        <span id="badge-convergence" class="badge-pill level-green">Convergenza: --</span>
+        <span id="badge-confidence" class="badge-pill level-green">Consenso 5 Modelli: --%</span>
+        <span id="timestamp-badge" class="badge-pill level-physics">--:--</span>
       </div>
     </section>
 
-    <!-- Griglia Principale: Condizioni Attuali + Mappa Radar/Nautica Interattiva -->
-    <section class="hero-grid">
-      <!-- Card KPI Real-Time & Nowcast -->
+    <!-- ======================================================================
+         SCHEDA 1: 📡 ADESSO (Verità Osservativa: Stazioni Reali OMIRL, Idrometri & Webcam Live)
+         ====================================================================== -->
+    <section id="tab-adesso" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-adesso">
+      <!-- Riepilogo Osservativo & Fisica Attuale -->
       <article class="card">
         <div class="card-header">
-          <h2 class="card-title" id="hero-kpi-title">📡 Osservazione & Ensemble Real-Time</h2>
-          <span id="timestamp-badge" style="font-size: 0.76rem; color: var(--text-muted);">--:--</span>
+          <h2 class="card-title" id="hero-kpi-title">📡 Quadro Attuale sulla Località Selezionata</h2>
+          <button type="button" class="btn-action" onclick="window.switchTab('tab-mappa')">
+            🗺️ Torna alla Mappa Live
+          </button>
         </div>
 
         <div style="display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 1rem;">
           <div>
             <div id="main-weather-desc" style="font-size: 1.05rem; font-weight: 700; color: #38bdf8;">--</div>
-            <div style="display: flex; align-items: baseline; gap: 0.8rem; margin-top: 0.2rem;">
-              <span id="main-temp" style="font-size: 2.75rem; font-weight: 900; line-height: 1;">--°C</span>
+            <div style="display: flex; align-items: baseline; gap: 0.85rem; margin-top: 0.2rem;">
+              <span id="main-temp" style="font-size: 2.65rem; font-weight: 900; line-height: 1;">--°C</span>
               <span id="main-wind-summary" style="font-size: 0.92rem; color: #cbd5e1;">Vento: --</span>
             </div>
           </div>
           <div style="text-align: right;">
-            <div id="pressure-value" style="font-size: 0.92rem; font-weight: 700;">---- hPa</div>
-            <div id="pressure-trend" style="font-size: 0.76rem; color: var(--text-muted);">Tendenza 3h: --</div>
+            <div id="pressure-value" style="font-size: 0.95rem; font-weight: 700;">---- hPa</div>
+            <div id="pressure-trend" style="font-size: 0.76rem; color: var(--text-muted);">Tendenza barica 3h: --</div>
           </div>
         </div>
 
-        <!-- 6 KPI Dinamici che cambiano focus tra TERRA e MARE -->
         <div id="kpi-dynamic-grid" class="kpi-grid"></div>
 
-        <!-- Nota locale sul vento ligure -->
-        <div id="wind-local-note" style="margin-top: 0.85rem; padding: 0.65rem 0.85rem; border-radius: 9px; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); font-size: 0.8rem;">
+        <div id="wind-local-note" style="margin-top: 0.8rem; padding: 0.65rem 0.85rem; border-radius: 9px; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.22); font-size: 0.8rem;">
           🧭 Caricamento diagnostica vento locale...
         </div>
       </article>
 
-      <!-- Card Mappa Interattiva Leaflet con Layer Radar RainViewer & Pin Terra/Mare -->
+      <!-- Stazioni Meteo/Marine Reali OMIRL più vicine -->
+      <div class="dual-grid">
+        <article class="card">
+          <div class="card-header">
+            <h2 class="card-title">🌡️💨 Stazioni Reali OMIRL / ARPAL Più Vicine (Dati Misurati, NON Modello)</h2>
+            <span class="badge-pill level-physics">VERITÀ OSSERVATIVA</span>
+          </div>
+          <div id="omirl-stations-grid" class="stations-grid"></div>
+        </article>
+
+        <!-- Idrometri Reali Torrenti Genovesi -->
+        <article class="card">
+          <div class="card-header">
+            <h2 class="card-title">🌊📏 Idrometri Reali Torrenti & Fiumi (Bisagno, Polcevera, Entella, Stura, Scrivia)</h2>
+            <span class="badge-pill level-green">LIVELLI IN METRI</span>
+          </div>
+          <div id="omirl-hydrometers-grid" class="stations-grid"></div>
+        </article>
+      </div>
+
+      <!-- Galleria Webcam Live ("Occhio sul Territorio e sul Mare") -->
       <article class="card">
         <div class="card-header">
-          <h2 class="card-title">🗺️ Mappa Radar Live & Settori Terra/Mare (Clicca un punto)</h2>
-          <div style="display: flex; gap: 0.4rem;">
-            <button id="btn-toggle-radar" type="button" class="btn-action" style="padding: 0.28rem 0.65rem; font-size: 0.75rem;">
-              🌧️ Radar ON/OFF
+          <h2 class="card-title">📷 Occhio Visivo sul Territorio e sul Mare — Webcam Live Più Vicine</h2>
+          <span style="font-size: 0.76rem; color: var(--text-muted);">Verifica visiva copertura cielo, visibilità e stato del mare a riva</span>
+        </div>
+        <div id="live-webcams-grid" class="webcam-grid"></div>
+      </article>
+    </section>
+
+    <!-- ======================================================================
+         SCHEDA 2: ⏱️ NOWCAST 0-3h & FISICA (Terra: Idro/Viabilità/Valichi/Comfort | Mare: Fisica Costiera Pura)
+         ====================================================================== -->
+    <section id="tab-nowcast" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-nowcast">
+      <article class="card">
+        <div class="card-header">
+          <h2 class="card-title">⏱️ Nowcasting Ad Alta Risoluzione (Prossime 3 Ore — Step 15 Minuti)</h2>
+          <span style="font-size: 0.76rem; color: var(--text-muted);">Risoluzione Convettiva 1.3 - 2.0 km (AROME HD + ICON-D2)</span>
+        </div>
+        <div id="nowcast-15m-strip" class="nowcast-strip"></div>
+      </article>
+
+      <div class="dual-grid">
+        <!-- Pannello TERRA: Fisica + Indicatori Operativi Idro/Sottopassi/Viadotti/Valichi/Comfort -->
+        <article class="card" id="panel-land-details">
+          <div class="card-header">
+            <h2 class="card-title">🏔️ Fisica & Indicatori Operativi TERRA (Bacini, Viadotti, Valichi & Maccaja)</h2>
+            <span id="land-overall-badge" class="badge-pill level-green">REGOLARE</span>
+          </div>
+          <div id="land-risk-items" class="risk-list"></div>
+        </article>
+
+        <!-- Pannello MARE: Strumentazione Fisica Costiera Pura (ZERO semafori soggettivi!) -->
+        <article class="card" id="panel-sea-details">
+          <div class="card-header">
+            <h2 class="card-title">🌊 Strumentazione Fisica & Oceanografica MARE (Zero Semafori Soggettivi)</h2>
+            <span id="sea-overall-badge" class="badge-pill level-physics">FISICA PURA</span>
+          </div>
+          <div id="sea-risk-items" class="risk-list"></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ======================================================================
+         SCHEDA 3: 🗺️ MAPPA LIVE (SCHEDA PREDEFINITA ALL'AVVIO — Clicca per aprire 1. ADESSO)
+         ====================================================================== -->
+    <section id="tab-mappa" class="tab-panel active" role="tabpanel" aria-labelledby="btn-tab-mappa">
+      <article class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">🗺️ Mappa Operativa Interattiva — Clicca un Comune, Quartiere, Rada o Punto Libero</h2>
+            <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">
+              💡 Cliccando qualsiasi località o punto sulla mappa, il sistema seleziona quella coordinata e apre automaticamente la scheda <strong>1. 📡 ADESSO</strong>.
+            </p>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
+            <button id="btn-toggle-radar" type="button" class="btn-action">
+              🌧️ Radar RainViewer: ON
+            </button>
+            <button id="btn-toggle-omirl" type="button" class="btn-action">
+              📡 Stazioni OMIRL: ON
+            </button>
+            <button id="btn-toggle-webcams" type="button" class="btn-action">
+              📷 Webcam: ON
+            </button>
+            <button id="btn-toggle-amp" type="button" class="btn-action">
+              ⚓ Zone AMP Portofino: ON
             </button>
           </div>
         </div>
+
         <div id="genova-map" role="application" aria-label="Mappa interattiva Provincia di Genova e Golfo Ligure"></div>
-        <div class="map-toolbar">
-          <span id="map-coords-label">📍 Coordinate attive: 44.4072, 8.9338</span>
-          <span id="radar-time-label">Radar RainViewer: Live</span>
+
+        <!-- Player Animazione Radar (Play/Pause + Slider Temporale Passato 2h / Nowcast) -->
+        <div class="radar-player-bar">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <button id="btn-radar-play" type="button" class="btn-action">▶️ Play Radar</button>
+            <span id="radar-time-label" style="font-size: 0.8rem; font-weight: 700; color: #38bdf8;">Radar Live</span>
+          </div>
+          <input
+            id="radar-frame-slider"
+            type="range"
+            min="0"
+            max="0"
+            value="0"
+            class="radar-slider"
+            aria-label="Timeline frame radar precipitazioni"
+          />
+          <span id="map-coords-label" style="font-size: 0.78rem; color: var(--text-muted);">
+            📍 Coordinate attive: 44.4072, 8.9339
+          </span>
         </div>
       </article>
     </section>
 
-    <!-- Striscia Nowcasting 0-3 Ore (Step 15 Minuti) -->
-    <section class="card">
-      <div class="card-header">
-        <h2 class="card-title">⏱️ Nowcasting Ad Alta Risoluzione (Prossime 3 Ore — Step 15 Minuti)</h2>
-        <span style="font-size: 0.76rem; color: var(--text-muted);">Risoluzione Convettiva 1.3 - 2.0 km</span>
+    <!-- ======================================================================
+         SCHEDA 4: 📊 FORECAST & 5 MODELLI (Grafici + Tabella Ora-per-Ora 5 Modelli + 7 Giorni)
+         ====================================================================== -->
+    <section id="tab-modelli" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-modelli">
+      <div class="charts-grid">
+        <article class="card">
+          <div class="card-header">
+            <h2 class="card-title">📊 Confronto Multi-Modello Pioggia & Temperatura (AROME 1.3km vs ICON-D2 2km vs ECMWF)</h2>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="chart-multimodel"></canvas>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-header">
+            <h2 class="card-title">💨🌊 Meteogramma Vento (kt/kmh), Raffiche & Onda Significativa (Hs) / Max (Hmax)</h2>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="chart-wind-wave"></canvas>
+          </div>
+        </article>
       </div>
-      <div id="nowcast-15m-strip" class="nowcast-strip"></div>
-    </section>
 
-    <!-- Pannelli Operativi: Sicurezza TERRA (Idrogeologico/Vallate/Valichi) & Sicurezza MARE (Nautica/Onde/Attività) -->
-    <section class="dual-grid">
-      <!-- Pannello TERRA -->
-      <article class="card" id="panel-land-details">
-        <div class="card-header">
-          <h2 class="card-title">🏔️ Diagnostica Operativa TERRA (Bacini, Viabilità & Valichi)</h2>
-          <span id="land-overall-badge" class="badge-pill level-green">REGOLARE</span>
-        </div>
-        <div id="land-risk-items" class="risk-list"></div>
-      </article>
-
-      <!-- Pannello MARE -->
-      <article class="card" id="panel-sea-details">
-        <div class="card-header">
-          <h2 class="card-title">🌊 Diagnostica Operativa MARE (Cinematica Onda & Semaforo Nautico)</h2>
-          <span id="sea-overall-badge" class="badge-pill level-green">FAVOREVOLE</span>
-        </div>
-        <div id="sea-risk-items" class="risk-list"></div>
-      </article>
-    </section>
-
-    <!-- Bollettino Sinottico Esperto & Google Gemini AI Advisor -->
-    <section class="card ai-card">
-      <div class="card-header">
-        <h2 class="card-title">🧠 Bollettino Sinottico Esperto & AI Meteo-Marine Advisor</h2>
-        <span id="ai-engine-badge" class="badge-pill level-green">Motore Sinottico Ligure</span>
-      </div>
-      <h3 id="ai-headline" style="font-size: 1rem; color: #38bdf8; margin-bottom: 0.45rem;">--</h3>
-      <p id="ai-synoptic-body" class="pretty-copy" style="font-size: 0.88rem; color: #e2e8f0; white-space: pre-line;"></p>
-      <div id="ai-takeaways-grid" class="ai-takeaways"></div>
-    </section>
-
-    <!-- Meteogrammi Multi-Modello 24/48h (Confronto AROME 1.3km vs ICON-D2 2km vs ECMWF + Onde/Nodi) -->
-    <section class="charts-grid">
+      <!-- Ispettore Tabellare Ora-per-Ora dei 5 Modelli ("Li voglio vedere tutti" — ORO-3) -->
       <article class="card">
         <div class="card-header">
-          <h2 class="card-title">📊 Confronto Multi-Modello Pioggia & Temperatura (AROME vs ICON-D2 vs ECMWF)</h2>
+          <h2 class="card-title">🔬 Ispettore Trasparente Ora-per-Ora — Tutti i 5 Modelli Fianco a Fianco (Prossime 24h)</h2>
+          <span class="badge-pill level-physics">AROME 1.3km • ICON-D2 2km • ECMWF 9km • GFS • MET Norway</span>
         </div>
-        <div class="chart-wrapper">
-          <canvas id="chart-multimodel"></canvas>
+        <div class="table-responsive">
+          <table class="forecast-table">
+            <thead>
+              <tr>
+                <th>Ora</th>
+                <th>Consenso Vento (kt | km/h)</th>
+                <th>AROME 1.3km</th>
+                <th>ICON-D2 2km</th>
+                <th>ECMWF 9km</th>
+                <th>GFS Global</th>
+                <th>MET Norway</th>
+                <th>Spread ΔVento</th>
+                <th>Pioggia (mm)</th>
+                <th>Onda Hs / Hmax @ Tp</th>
+                <th>Risacca Riva</th>
+              </tr>
+            </thead>
+            <tbody id="models-5-hourly-tbody"></tbody>
+          </table>
         </div>
       </article>
 
+      <!-- Previsione a 7 Giorni Terra & Mare -->
       <article class="card">
         <div class="card-header">
-          <h2 class="card-title">💨🌊 Meteogramma Vento (kt/kmh), Raffiche & Onda Significativa / Max</h2>
+          <h2 class="card-title">📅 Tendenza a 7 Giorni — Provincia di Genova (Terra & Fisica Mare)</h2>
+          <span style="font-size: 0.76rem; color: var(--text-muted);">Ensemble pesato 5 modelli + Open-Meteo Marine</span>
         </div>
-        <div class="chart-wrapper">
-          <canvas id="chart-wind-wave"></canvas>
+        <div class="table-responsive">
+          <table class="forecast-table">
+            <thead>
+              <tr>
+                <th>Giorno</th>
+                <th>Condizioni</th>
+                <th>Temp Min / Max</th>
+                <th>Pioggia (Media / Picco LAM)</th>
+                <th>Vento Dominante</th>
+                <th>Raffica Max (km/h | kt)</th>
+                <th>Mare Max (Hs / Hmax @ Tp)</th>
+              </tr>
+            </thead>
+            <tbody id="daily-7d-tbody"></tbody>
+          </table>
         </div>
       </article>
     </section>
 
-    <!-- Previsione a 7 Giorni Terra & Mare -->
-    <section class="card">
-      <div class="card-header">
-        <h2 class="card-title">📅 Tendenza a 7 Giorni — Provincia di Genova (Terra & Mare)</h2>
-        <span style="font-size: 0.76rem; color: var(--text-muted);">Ensemble pesato LAM + ECMWF IFS</span>
-      </div>
-      <div class="table-responsive">
-        <table class="forecast-table">
-          <thead>
-            <tr>
-              <th>Giorno</th>
-              <th>Condizioni</th>
-              <th>Temp Min / Max</th>
-              <th>Pioggia (Media / Picco LAM)</th>
-              <th>Vento Dominante</th>
-              <th>Raffica Max (km/h | kt)</th>
-              <th>Mare Max (Hs / Hmax @ Tp)</th>
-            </tr>
-          </thead>
-          <tbody id="daily-7d-tbody"></tbody>
-        </table>
+    <!-- ======================================================================
+         SCHEDA 5: 🧭 ROTTA, ETA & SMARTWATCH (Calcolatore Nautico Costiero Golfo di Genova)
+         ====================================================================== -->
+    <section id="tab-rotta" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-rotta">
+      <article class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">🧭 Calcolatore Pubblico di Rotta Costiera, ETA, Limiti AMP Portofino & Turnaround Time</h2>
+            <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">
+              Grafo nautico costiero che non taglia mai via terra i promontori e applica i limiti di velocità dell'Area Marina Protetta di Portofino (Zona A vietata, Zona B max 5 kt, Zona C max 7 kt).
+            </p>
+          </div>
+          <a href="/orologio" class="btn-action">⌚ Apri HUD Smartwatch (/orologio)</a>
+        </div>
+
+        <div class="route-form-grid">
+          <div class="form-field">
+            <label for="route-origin">Porto / Cala di Partenza</label>
+            <select id="route-origin" class="form-input"></select>
+          </div>
+          <div class="form-field">
+            <label for="route-dest">Cala / Porto di Destinazione</label>
+            <select id="route-dest" class="form-input"></select>
+          </div>
+          <div class="form-field">
+            <label for="route-speed">Velocità Crociera (Nodi kt)</label>
+            <input id="route-speed" type="number" min="1" max="40" step="0.5" value="6.0" class="form-input" />
+          </div>
+          <div class="form-field">
+            <label for="route-duration">Durata Totale Uscita (min)</label>
+            <input id="route-duration" type="number" min="20" max="600" step="10" value="90" class="form-input" />
+          </div>
+          <div class="form-field">
+            <label for="route-stop">Sosta / Bagno in Cala (min)</label>
+            <input id="route-stop" type="number" min="0" max="240" step="5" value="20" class="form-input" />
+          </div>
+          <div class="form-field">
+            <button id="btn-calc-route" type="button" class="btn-action" style="justify-content: center; height: 38px;">
+              ⚓ Calcola Piano Rotta & ETA
+            </button>
+          </div>
+        </div>
+
+        <div id="route-results-grid" class="kpi-grid" style="margin-top: 1rem;"></div>
+        <div id="route-legs-list" class="risk-list" style="margin-top: 0.9rem;"></div>
+      </article>
+    </section>
+
+    <!-- ======================================================================
+         SCHEDA 6: 📜 BOLLETTINI (ARPAL Ufficiale, Meteomar & Analisi Sinottica AI)
+         ====================================================================== -->
+    <section id="tab-bollettini" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-bollettini">
+      <!-- Analista Sinottico AI -->
+      <article class="card ai-card">
+        <div class="card-header">
+          <h2 class="card-title">🧠 Analista Sinottico Puro & AI Meteo-Marine Advisor (Spiegazione Fisica)</h2>
+          <span id="ai-engine-badge" class="badge-pill level-green">Motore Sinottico Ligure</span>
+        </div>
+        <h3 id="ai-headline" style="font-size: 1rem; color: #38bdf8; margin-bottom: 0.45rem;">--</h3>
+        <p id="ai-synoptic-body" class="pretty-copy" style="font-size: 0.88rem; color: #e2e8f0; white-space: pre-line;"></p>
+        <div id="ai-takeaways-grid" class="ai-takeaways"></div>
+      </article>
+
+      <!-- Bollettino Ufficiale ARPAL Liguria & METEOMAR -->
+      <div class="dual-grid">
+        <article class="card">
+          <div class="card-header">
+            <h2 class="card-title">🏛️ Bollettino Vigilanza & Previsione Ufficiale ARPAL Liguria</h2>
+            <span id="arpal-issued-badge" class="badge-pill level-physics">ARPAL</span>
+          </div>
+          <div id="arpal-bulletin-box" class="risk-list"></div>
+        </article>
+
+        <article class="card">
+          <div class="card-header">
+            <h2 class="card-title">📻 Bollettino Fisico METEOMAR — Settore Mar Ligure & Contatti Guardia Costiera</h2>
+            <span class="badge-pill level-physics">CANALE 16 VHF / 1530</span>
+          </div>
+          <div class="risk-list">
+            <div class="risk-item border-physics">
+              <div class="risk-item-title">Testo Integrale Stile METEOMAR Mar Ligure</div>
+              <div id="meteomar-text" class="risk-item-desc">--</div>
+            </div>
+            <div class="risk-item border-green">
+              <div class="risk-item-title">Contatti Ufficiali Soccorso in Mare (SAR)</div>
+              <div class="risk-item-desc">
+                • <strong>Guardia Costiera Emergenza:</strong> 1530 (Numero Blu gratuito)<br>
+                • <strong>Ascolto Radio Nautico:</strong> Canale 16 VHF (156.8 MHz)<br>
+                • <strong>Capitaneria di Porto di Genova:</strong> +39 010 27771
+              </div>
+            </div>
+          </div>
+        </article>
       </div>
     </section>
 
-    <!-- Bollettino Meteomar Testuale & Disclaimer Ufficiali di Sicurezza (ADR-0002) -->
+    <!-- Disclaimer Ufficiali di Sicurezza (ADR-0002) -->
     <footer class="footer-disclaimer">
-      <div><strong>📻 Sintesi Stile METEOMAR (Settore Mar Ligure):</strong> <span id="meteomar-text">--</span></div>
       <div id="disclaimer-land-text"></div>
       <div id="disclaimer-sea-text"></div>
     </footer>

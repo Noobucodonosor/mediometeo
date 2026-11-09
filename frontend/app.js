@@ -1,33 +1,50 @@
 /* ==========================================================================
-   MedioMeteo Genova — Client Application (ADR-0004)
-   Gestisce:
-   - Switch Dual-Mode TERRA / MARE
-   - Mappa Leaflet interattiva con marker dei 10 distretti + click libero + Radar RainViewer
-   - Grafici multi-modello Chart.js (AROME 1.3km vs ICON-D2 2km vs ECMWF + Vento/Onde)
-   - Bollettino AI Advisor & Diagnostica Convergenza Ligure
+   MedioMeteo Genova v2.0 — Client Application a 6 Schede Chiuse (ADR-0005, ADR-0006)
+   Caratteristiche:
+   - 6 Schede Chiuse mutuamente esclusive ("Schede Chiuse"): all'avvio apre `3. MAPPA LIVE`.
+   - Cliccando un Comune, Quartiere, Rada o punto libero sulla mappa -> seleziona la località e
+     passa automaticamente a `1. ADESSO (Sensori Reali OMIRL, Idrometri & Webcam)`.
+   - Modalità MARE a Fisica Costiera Pura (Zero semafori consiglio soggettivi).
+   - Ispettore Ora-per-Ora con tutti i 5 modelli (AROME 1.3km, ICON-D2 2km, ECMWF 9km, GFS, MET Norway).
+   - Calcolatore Pubblico di Rotta Costiera, ETA, Limiti AMP Portofino & Turnaround Time.
    ========================================================================== */
 
 const state = {
   mode: "land", // 'land' | 'sea'
-  selectedDistrictId: "GE-CENTRO-PONENTE",
-  customCoords: null, // { lat, lon } se l'utente clicca un punto libero sulla mappa
-  districts: [],
+  activeTab: "tab-mappa", // Scheda predefinita all'avvio: 3. MAPPA LIVE
+  selectedLocationId: "COM-GENOVA",
+  customCoords: null, // { lat, lon }
+  locations: [],
+  filteredLocations: [],
+  ampZones: [],
+  coastalWaypoints: [],
   weatherPkg: null,
   aiBulletin: null,
+  routePlan: null,
   map: null,
   radarLayer: null,
   radarVisible: true,
+  radarPlaying: false,
+  radarTimer: null,
+  radarFrameIndex: 0,
+  omirlLayerGroup: null,
+  omirlVisible: true,
+  webcamLayerGroup: null,
+  webcamsVisible: true,
+  ampLayerGroup: null,
+  ampVisible: true,
+  locationsLayerGroup: null,
+  routePolyline: null,
   customMarker: null,
-  districtMarkers: {},
   chartMultiModel: null,
   chartWindWave: null,
 };
 
 const LEVEL_LABELS = {
-  green: "REGOLARE / FAVOREVOLE",
+  green: "REGOLARE",
   yellow: "ATTENZIONE / CAUTELA",
   orange: "CRITICITÀ MODERATA-ALTA",
-  red: "ALLERTA / CONDIZIONI CRITICHE",
+  red: "ALLERTA / CRITICITÀ ELEVATA",
 };
 
 function setBadgeLevel(el, level, text) {
@@ -36,11 +53,31 @@ function setBadgeLevel(el, level, text) {
   el.textContent = text;
 }
 
+window.switchTab = function switchTab(tabId) {
+  state.activeTab = tabId;
+  document.querySelectorAll(".tab-btn").forEach((btn) => {
+    const isTarget = btn.getAttribute("data-tab") === tabId;
+    btn.classList.toggle("active", isTarget);
+    btn.setAttribute("aria-selected", isTarget ? "true" : "false");
+  });
+  document.querySelectorAll(".tab-panel").forEach((panel) => {
+    panel.classList.toggle("active", panel.id === tabId);
+  });
+
+  if (tabId === "tab-mappa" && state.map) {
+    setTimeout(() => state.map.invalidateSize(), 80);
+  }
+  if (tabId === "tab-modelli" && state.weatherPkg) {
+    setTimeout(() => renderCharts(state.weatherPkg.forecast.hourly_48h), 60);
+  }
+};
+
 async function initApp() {
   bindUIEvents();
-  await loadDistricts();
+  await loadLocationsCatalog();
   initLeafletMap();
   await refreshAllData(false);
+  await calculateCoastalRoute();
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
@@ -48,43 +85,116 @@ async function initApp() {
 }
 
 function bindUIEvents() {
-  const btnLand = document.getElementById("btn-mode-land");
-  const btnSea = document.getElementById("btn-mode-sea");
-  const selectDistrict = document.getElementById("district-select");
-  const btnRefresh = document.getElementById("btn-refresh");
-  const btnRadar = document.getElementById("btn-toggle-radar");
-
-  btnLand.addEventListener("click", () => switchMode("land"));
-  btnSea.addEventListener("click", () => switchMode("sea"));
-
-  selectDistrict.addEventListener("change", async (e) => {
-    state.selectedDistrictId = e.target.value;
-    state.customCoords = null;
-    if (state.customMarker && state.map) {
-      state.map.removeLayer(state.customMarker);
-      state.customMarker = null;
-    }
-    const found = state.districts.find((d) => d.id === state.selectedDistrictId);
-    if (found) {
-      state.mode = found.category;
-      updateModeButtonsUI();
-      if (state.map) {
-        state.map.flyTo([found.lat, found.lon], found.category === "sea" ? 11 : 12, {
-          duration: 0.7,
-        });
-      }
-    }
-    await refreshAllData(false);
+  // 6 Tab Buttons
+  document.querySelectorAll(".tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const targetTab = btn.getAttribute("data-tab");
+      window.switchTab(targetTab);
+    });
   });
 
-  btnRefresh.addEventListener("click", async () => {
+  // Mode Switch TERRA / MARE
+  document.getElementById("btn-mode-land").addEventListener("click", () => switchMode("land"));
+  document.getElementById("btn-mode-sea").addEventListener("click", () => switchMode("sea"));
+
+  // Filtri e Ricerca 118 Località
+  const typeFilter = document.getElementById("loc-type-filter");
+  const searchInput = document.getElementById("loc-search-input");
+  const selectLoc = document.getElementById("district-select");
+
+  typeFilter.addEventListener("change", () => populateLocationSelect());
+  searchInput.addEventListener("input", () => populateLocationSelect());
+
+  selectLoc.addEventListener("change", async (e) => {
+    await selectLocationById(e.target.value, false);
+  });
+
+  // GPS Button
+  document.getElementById("btn-gps").addEventListener("click", () => {
+    if (!navigator.geolocation) {
+      alert("Geolocalizzazione non supportata dal browser.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = Number(pos.coords.latitude.toFixed(4));
+        const lon = Number(pos.coords.longitude.toFixed(4));
+        state.customCoords = { lat, lon };
+        await refreshAllData(false);
+        window.switchTab("tab-adesso");
+      },
+      () => {
+        alert("Impossibile ottenere la posizione GPS. Usa la Mappa Live o il selettore Comuni.");
+      }
+    );
+  });
+
+  // Refresh Live Button
+  document.getElementById("btn-refresh").addEventListener("click", async () => {
     await refreshAllData(true);
   });
 
-  btnRadar.addEventListener("click", () => {
+  // Map Layer Toggles
+  document.getElementById("btn-toggle-radar").addEventListener("click", (e) => {
     state.radarVisible = !state.radarVisible;
+    e.currentTarget.textContent = `🌧️ Radar RainViewer: ${state.radarVisible ? "ON" : "OFF"}`;
     updateRadarLayer();
   });
+
+  document.getElementById("btn-toggle-omirl").addEventListener("click", (e) => {
+    state.omirlVisible = !state.omirlVisible;
+    e.currentTarget.textContent = `📡 Stazioni OMIRL: ${state.omirlVisible ? "ON" : "OFF"}`;
+    renderMapOverlays();
+  });
+
+  document.getElementById("btn-toggle-webcams").addEventListener("click", (e) => {
+    state.webcamsVisible = !state.webcamsVisible;
+    e.currentTarget.textContent = `📷 Webcam: ${state.webcamsVisible ? "ON" : "OFF"}`;
+    renderMapOverlays();
+  });
+
+  document.getElementById("btn-toggle-amp").addEventListener("click", (e) => {
+    state.ampVisible = !state.ampVisible;
+    e.currentTarget.textContent = `⚓ Zone AMP Portofino: ${state.ampVisible ? "ON" : "OFF"}`;
+    renderMapOverlays();
+  });
+
+  // Radar Player Controls
+  document.getElementById("btn-radar-play").addEventListener("click", toggleRadarAnimation);
+  document.getElementById("radar-frame-slider").addEventListener("input", (e) => {
+    state.radarFrameIndex = Number(e.target.value);
+    updateRadarLayer();
+  });
+
+  // Route Calculator
+  document.getElementById("btn-calc-route").addEventListener("click", calculateCoastalRoute);
+}
+
+async function selectLocationById(locId, autoSwitchToAdesso = false) {
+  state.selectedLocationId = locId;
+  state.customCoords = null;
+  if (state.customMarker && state.map) {
+    state.map.removeLayer(state.customMarker);
+    state.customMarker = null;
+  }
+
+  const found = state.locations.find((l) => l.id === locId);
+  if (found) {
+    state.mode = found.category;
+    updateModeButtonsUI();
+    const selectEl = document.getElementById("district-select");
+    if (selectEl) selectEl.value = locId;
+    if (state.map) {
+      state.map.flyTo([found.lat, found.lon], found.category === "sea" ? 12 : 12, {
+        duration: 0.65,
+      });
+    }
+  }
+
+  await refreshAllData(false);
+  if (autoSwitchToAdesso) {
+    window.switchTab("tab-adesso");
+  }
 }
 
 function updateModeButtonsUI() {
@@ -103,105 +213,133 @@ async function switchMode(targetMode) {
   state.mode = targetMode;
   updateModeButtonsUI();
 
-  // Se non siamo su un pin personalizzato e il distretto corrente appartiene all'altra categoria,
-  // passa al distretto principale della modalità scelta
-  const currentDist = state.districts.find((d) => d.id === state.selectedDistrictId);
-  if (currentDist && currentDist.category !== targetMode && !state.customCoords) {
-    state.selectedDistrictId =
-      targetMode === "sea" ? "MARE-PORTO-DIGA" : "GE-CENTRO-PONENTE";
-    document.getElementById("district-select").value = state.selectedDistrictId;
-    const nextDist = state.districts.find((d) => d.id === state.selectedDistrictId);
-    if (nextDist && state.map) {
-      state.map.flyTo([nextDist.lat, nextDist.lon], 11, { duration: 0.6 });
-    }
-    await refreshAllData(false);
+  const currentLoc = state.locations.find((l) => l.id === state.selectedLocationId);
+  if (currentLoc && currentLoc.category !== targetMode && !state.customCoords) {
+    const defaultId =
+      targetMode === "sea"
+        ? "SEA-AVAMPORTO-DI-GENOVA-&-DIGA-FORANEA-LEVANTE"
+        : "COM-GENOVA";
+    await selectLocationById(defaultId, false);
   } else if (state.weatherPkg) {
     renderDashboard();
   }
 }
 
-async function loadDistricts() {
-  const res = await fetch("/api/v1/districts");
+async function loadLocationsCatalog() {
+  const res = await fetch("/api/v1/locations");
   const data = await res.json();
-  state.districts = data.districts || [];
+  state.locations = data.locations || [];
+  state.ampZones = data.amp_portofino_zones || [];
+  state.coastalWaypoints = data.coastal_waypoints || [];
 
+  populateLocationSelect();
+  populateRouteWaypoints();
+}
+
+function populateLocationSelect() {
   const select = document.getElementById("district-select");
+  const typeFilter = document.getElementById("loc-type-filter").value;
+  const query = (document.getElementById("loc-search-input").value || "").trim().toLowerCase();
+
+  const filtered = state.locations.filter((loc) => {
+    if (typeFilter && loc.loc_type !== typeFilter) return false;
+    if (
+      query &&
+      !loc.name.toLowerCase().includes(query) &&
+      !loc.valley_or_sector.toLowerCase().includes(query)
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+  state.filteredLocations = filtered;
   select.innerHTML = "";
 
-  const groupLand = document.createElement("optgroup");
-  groupLand.label = "🏔️ DISTRETTI TERRA (Provincia di Genova)";
-  const groupSea = document.createElement("optgroup");
-  groupSea.label = "🌊 SETTORI MARE (Golfo di Genova & Largo)";
+  const groups = {
+    comune: { label: "🏛️ 67 COMUNI CITTÀ METROPOLITANA DI GENOVA", el: document.createElement("optgroup") },
+    quartiere: { label: "🏙️ 25 QUARTIERI / MUNICIPI DI GENOVA", el: document.createElement("optgroup") },
+    rada_porto: { label: "⚓ 20 RADE, PORTI, CALE & CAPI (GOLFO LIGURE)", el: document.createElement("optgroup") },
+    valico: { label: "⛰️ 6 VALICHI APPENNINICI & AUTOSTRADALI", el: document.createElement("optgroup") },
+  };
 
-  state.districts.forEach((d) => {
+  Object.values(groups).forEach((g) => {
+    g.el.label = g.label;
+  });
+
+  filtered.forEach((loc) => {
     const opt = document.createElement("option");
-    opt.value = d.id;
-    opt.textContent = `${d.category === "sea" ? "⚓" : "📍"} ${d.name}`;
-    if (d.category === "sea") {
-      groupSea.appendChild(opt);
-    } else {
-      groupLand.appendChild(opt);
+    opt.value = loc.id;
+    const icon =
+      loc.loc_type === "rada_porto"
+        ? "⚓"
+        : loc.loc_type === "valico"
+        ? "⛰️"
+        : loc.loc_type === "quartiere"
+        ? "🏙️"
+        : "🏛️";
+    opt.textContent = `${icon} ${loc.name} (${loc.valley_or_sector})`;
+    if (groups[loc.loc_type]) {
+      groups[loc.loc_type].el.appendChild(opt);
     }
   });
 
-  select.appendChild(groupLand);
-  select.appendChild(groupSea);
-  select.value = state.selectedDistrictId;
+  Object.values(groups).forEach((g) => {
+    if (g.el.children.length > 0) {
+      select.appendChild(g.el);
+    }
+  });
+
+  if (filtered.some((l) => l.id === state.selectedLocationId)) {
+    select.value = state.selectedLocationId;
+  } else if (filtered.length > 0) {
+    select.value = filtered[0].id;
+  }
+}
+
+function populateRouteWaypoints() {
+  const selOrigin = document.getElementById("route-origin");
+  const selDest = document.getElementById("route-dest");
+  if (!selOrigin || !selDest) return;
+
+  selOrigin.innerHTML = "";
+  selDest.innerHTML = "";
+
+  state.coastalWaypoints.forEach((wp) => {
+    const o1 = document.createElement("option");
+    o1.value = wp.id;
+    o1.textContent = `⚓ ${wp.name}${wp.amp_zone ? " [" + wp.amp_zone + "]" : ""}`;
+    const o2 = o1.cloneNode(true);
+    selOrigin.appendChild(o1);
+    selDest.appendChild(o2);
+  });
+
+  selOrigin.value = "portofino";
+  selDest.value = "san_fruttuoso";
 }
 
 function initLeafletMap() {
   if (typeof L === "undefined") return;
 
   state.map = L.map("genova-map", {
-    center: [44.38, 8.98],
+    center: [44.395, 9.03],
     zoom: 10,
     zoomControl: true,
   });
 
-  // Base CartoDB Dark Matter ad alto contrasto per lettura radar meteo e nautica
   L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    attribution: '&copy; OpenStreetMap &copy; CARTO | MedioMeteo Genova',
+    attribution: "&copy; OpenStreetMap &copy; CARTO | MedioMeteo Genova",
     maxZoom: 18,
   }).addTo(state.map);
 
-  // Aggiungi marker per tutti i 10 distretti Terra e Mare
-  state.districts.forEach((d) => {
-    const isSea = d.category === "sea";
-    const markerHtml = `
-      <div style="
-        background: ${isSea ? "#0284c7" : "#059669"};
-        color: #fff;
-        border: 2px solid #fff;
-        border-radius: 999px;
-        width: 28px;
-        height: 28px;
-        display: grid;
-        place-items: center;
-        font-size: 14px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.6);
-      ">${isSea ? "⚓" : "🏔️"}</div>
-    `;
-    const icon = L.divIcon({
-      html: markerHtml,
-      className: "",
-      iconSize: [28, 28],
-      iconAnchor: [14, 14],
-    });
+  state.locationsLayerGroup = L.layerGroup().addTo(state.map);
+  state.ampLayerGroup = L.layerGroup().addTo(state.map);
+  state.omirlLayerGroup = L.layerGroup().addTo(state.map);
+  state.webcamLayerGroup = L.layerGroup().addTo(state.map);
 
-    const marker = L.marker([d.lat, d.lon], { icon }).addTo(state.map);
-    marker.bindTooltip(`<strong>${d.short_name}</strong><br>${d.arpal_zone}`);
-    marker.on("click", async () => {
-      state.selectedDistrictId = d.id;
-      state.customCoords = null;
-      state.mode = d.category;
-      document.getElementById("district-select").value = d.id;
-      updateModeButtonsUI();
-      await refreshAllData(false);
-    });
-    state.districtMarkers[d.id] = marker;
-  });
+  renderLocationsOnMap();
 
-  // Click su qualsiasi punto in Terra o Mare nel Golfo di Genova
+  // Click libero sulla Mappa Live -> seleziona coordinata e passa automaticamente a 1. ADESSO (ADR-0006)
   state.map.on("click", async (ev) => {
     const lat = Number(ev.latlng.lat.toFixed(4));
     const lon = Number(ev.latlng.lng.toFixed(4));
@@ -215,20 +353,225 @@ function initLeafletMap() {
       color: "#38bdf8",
       weight: 3,
       fillColor: "#f59e0b",
-      fillOpacity: 0.9,
+      fillOpacity: 0.92,
     })
       .addTo(state.map)
       .bindPopup(`Punto selezionato:<br><strong>${lat}, ${lon}</strong>`)
       .openPopup();
 
     await refreshAllData(false);
+    window.switchTab("tab-adesso");
   });
+}
+
+function renderLocationsOnMap() {
+  if (!state.map || !state.locationsLayerGroup) return;
+  state.locationsLayerGroup.clearLayers();
+
+  state.locations.forEach((loc) => {
+    const colorMap = {
+      comune: "#10b981",
+      quartiere: "#34d399",
+      rada_porto: "#0ea5e9",
+      valico: "#f59e0b",
+    };
+    const symbolMap = {
+      comune: "🏛️",
+      quartiere: "🏙️",
+      rada_porto: "⚓",
+      valico: "⛰️",
+    };
+    const bg = colorMap[loc.loc_type] || "#10b981";
+    const sym = symbolMap[loc.loc_type] || "📍";
+    const size = loc.loc_type === "rada_porto" || loc.id === "COM-GENOVA" ? 26 : 21;
+
+    const icon = L.divIcon({
+      html: `<div style="
+        background: ${bg};
+        color: #fff;
+        border: 1.5px solid #fff;
+        border-radius: 999px;
+        width: ${size}px;
+        height: ${size}px;
+        display: grid;
+        place-items: center;
+        font-size: ${size > 22 ? 13 : 10}px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.65);
+      ">${sym}</div>`,
+      className: "",
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2],
+    });
+
+    const marker = L.marker([loc.lat, loc.lon], { icon }).addTo(state.locationsLayerGroup);
+    const bayNote =
+      loc.bay_open_deg !== null && loc.bay_open_deg !== undefined
+        ? `<br>📐 Cala aperta a <strong>${loc.bay_open_deg}°</strong>`
+        : "";
+    marker.bindTooltip(
+      `<strong>${loc.name}</strong> (${loc.loc_type.toUpperCase()})<br>${loc.valley_or_sector}${bayNote}<br><em>Clicca per aprire 1. 📡 ADESSO</em>`
+    );
+
+    // Regola /grill-me #14: Cliccando un Comune/Quartiere/Rada sulla Mappa Live -> seleziona e apre 1. ADESSO
+    marker.on("click", async (ev) => {
+      L.DomEvent.stopPropagation(ev);
+      await selectLocationById(loc.id, true);
+    });
+  });
+}
+
+function renderMapOverlays() {
+  if (!state.map) return;
+
+  // 1. Poligoni AMP Portofino (Zone A, B, C)
+  state.ampLayerGroup.clearLayers();
+  if (state.ampVisible && state.ampZones.length) {
+    state.ampZones.forEach((zone) => {
+      const poly = L.polygon(zone.coords, {
+        color: zone.color,
+        weight: 2,
+        fillColor: zone.color,
+        fillOpacity: 0.22,
+      }).addTo(state.ampLayerGroup);
+      poly.bindTooltip(
+        `<strong>${zone.name}</strong><br>Limite velocità: <strong>${
+          zone.max_speed_knots === 0 ? "DIVIETO ACCESSO" : zone.max_speed_knots + " kt"
+        }</strong><br>${zone.rules}`
+      );
+    });
+  }
+
+  if (!state.weatherPkg) return;
+  const obs = state.weatherPkg.observations_live || {};
+
+  // 2. Stazioni Reali OMIRL & Idrometri sulla Mappa
+  state.omirlLayerGroup.clearLayers();
+  if (state.omirlVisible) {
+    const stations = obs.all_weather_stations || obs.nearest_weather_stations || [];
+    stations.forEach((st) => {
+      const badgeHtml = `<div style="
+        background: rgba(6, 16, 30, 0.92);
+        color: #7dd3fc;
+        border: 1px solid #38bdf8;
+        border-radius: 6px;
+        padding: 1px 5px;
+        font-size: 10px;
+        font-weight: 800;
+        white-space: nowrap;
+      ">📡 ${st.wind_knots ?? "--"}kt</div>`;
+      const icon = L.divIcon({
+        html: badgeHtml,
+        className: "",
+        iconSize: [54, 18],
+        iconAnchor: [27, 9],
+      });
+      const m = L.marker([st.lat, st.lon], { icon }).addTo(state.omirlLayerGroup);
+      m.bindTooltip(
+        `<strong>📡 Stazione OMIRL: ${st.name} (${st.code})</strong><br>` +
+          `Vento: ${st.wind_knots} kt (${st.wind_kmh} km/h) | Raffica: ${st.gust_knots} kt<br>` +
+          `Temp: ${st.temp_c}°C | Pioggia 1h: ${st.precip_1h_mm} mm`
+      );
+    });
+
+    const hydros = obs.all_river_hydrometers || obs.nearest_river_hydrometers || [];
+    hydros.forEach((hy) => {
+      const color =
+        hy.status_level === "red"
+          ? "#ef4444"
+          : hy.status_level === "orange"
+          ? "#f97316"
+          : "#10b981";
+      const badgeHtml = `<div style="
+        background: rgba(6, 16, 30, 0.92);
+        color: ${color};
+        border: 1px solid ${color};
+        border-radius: 6px;
+        padding: 1px 5px;
+        font-size: 10px;
+        font-weight: 800;
+        white-space: nowrap;
+      ">🌊 ${hy.level_m}m</div>`;
+      const icon = L.divIcon({
+        html: badgeHtml,
+        className: "",
+        iconSize: [52, 18],
+        iconAnchor: [26, 9],
+      });
+      const m = L.marker([hy.lat, hy.lon], { icon }).addTo(state.omirlLayerGroup);
+      m.bindTooltip(
+        `<strong>🌊 Idrometro OMIRL: ${hy.name} (${hy.river})</strong><br>` +
+          `Livello attuale: <strong>${hy.level_m} m</strong> (Soglia Gialla: ${hy.warn_threshold_m} m / Rossa: ${hy.alarm_threshold_m} m)<br>` +
+          `${hy.status_label}`
+      );
+    });
+  }
+
+  // 3. Pin Webcam Live sulla Mappa
+  state.webcamLayerGroup.clearLayers();
+  if (state.webcamsVisible) {
+    const cams = obs.all_webcams || obs.nearest_webcams || [];
+    cams.forEach((cam) => {
+      const icon = L.divIcon({
+        html: `<div style="
+          background: #7c3aed;
+          color: #fff;
+          border: 1.5px solid #fff;
+          border-radius: 999px;
+          width: 22px;
+          height: 22px;
+          display: grid;
+          place-items: center;
+          font-size: 11px;
+        ">📷</div>`,
+        className: "",
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+      });
+      const m = L.marker([cam.lat, cam.lon], { icon }).addTo(state.webcamLayerGroup);
+      m.bindPopup(
+        `<strong>📷 ${cam.name}</strong><br>${cam.view_direction}<br>` +
+          `<a href="${cam.portal_url}" target="_blank" rel="noopener" style="color:#38bdf8;font-weight:700;">Apri Stream / Portale Live ↗</a>`
+      );
+    });
+  }
+}
+
+function toggleRadarAnimation() {
+  const btn = document.getElementById("btn-radar-play");
+  const frames = state.weatherPkg?.nowcast?.radar?.frames || [];
+  if (!frames.length) return;
+
+  state.radarPlaying = !state.radarPlaying;
+  if (state.radarPlaying) {
+    btn.textContent = "⏸️ Pausa Radar";
+    state.radarTimer = setInterval(() => {
+      state.radarFrameIndex = (state.radarFrameIndex + 1) % frames.length;
+      const slider = document.getElementById("radar-frame-slider");
+      if (slider) slider.value = String(state.radarFrameIndex);
+      updateRadarLayer();
+    }, 850);
+  } else {
+    btn.textContent = "▶️ Play Radar";
+    if (state.radarTimer) {
+      clearInterval(state.radarTimer);
+      state.radarTimer = null;
+    }
+  }
 }
 
 function updateRadarLayer() {
   if (!state.map || !state.weatherPkg) return;
-  const radar = state.weatherPkg.nowcast?.radar;
-  const latestTileUrl = radar?.latest_tile_url;
+  const radar = state.weatherPkg.nowcast?.radar || {};
+  const frames = radar.frames || [];
+  const slider = document.getElementById("radar-frame-slider");
+
+  if (slider && frames.length > 0) {
+    slider.max = String(frames.length - 1);
+    if (state.radarFrameIndex >= frames.length) {
+      state.radarFrameIndex = frames.length - 1;
+    }
+    slider.value = String(state.radarFrameIndex);
+  }
 
   if (state.radarLayer) {
     state.map.removeLayer(state.radarLayer);
@@ -237,22 +580,23 @@ function updateRadarLayer() {
 
   const labelEl = document.getElementById("radar-time-label");
   if (!state.radarVisible) {
-    labelEl.textContent = "Radar RainViewer: Nascosto";
+    labelEl.textContent = "Radar RainViewer: OFF";
     return;
   }
 
-  if (latestTileUrl) {
-    state.radarLayer = L.tileLayer(latestTileUrl, {
-      opacity: 0.62,
+  const activeFrame = frames[state.radarFrameIndex] || frames[frames.length - 1];
+  const tileUrl = activeFrame?.tile_url || radar.latest_tile_url;
+
+  if (tileUrl) {
+    state.radarLayer = L.tileLayer(tileUrl, {
+      opacity: 0.64,
       zIndex: 450,
     }).addTo(state.map);
-    const frames = radar.frames || [];
-    const lastFrame = frames[frames.length - 1];
-    labelEl.textContent = lastFrame
-      ? `Radar Precipitazioni: ${lastFrame.time_label} (${lastFrame.is_nowcast ? "Nowcast" : "Live"})`
-      : "Radar Precipitazioni: Attivo";
+    labelEl.textContent = activeFrame
+      ? `Radar: ${activeFrame.time_label} (${activeFrame.is_nowcast ? "Nowcast +30m" : "Osservato"})`
+      : "Radar Precipitazioni: Live";
   } else {
-    labelEl.textContent = "Radar Precipitazioni: In aggiornamento";
+    labelEl.textContent = "Radar Precipitazioni: Nessun eco attivo";
   }
 }
 
@@ -265,7 +609,7 @@ async function refreshAllData(forceRefresh = false) {
     params.set("lat", state.customCoords.lat);
     params.set("lon", state.customCoords.lon);
   } else {
-    params.set("district", state.selectedDistrictId);
+    params.set("location", state.selectedLocationId);
   }
 
   try {
@@ -283,7 +627,13 @@ async function refreshAllData(forceRefresh = false) {
     state.weatherPkg = await forecastRes.json();
     state.aiBulletin = aiRes.ok ? await aiRes.json() : null;
 
+    const frames = state.weatherPkg.nowcast?.radar?.frames || [];
+    if (frames.length > 0) {
+      state.radarFrameIndex = frames.length - 1;
+    }
+
     renderDashboard();
+    renderMapOverlays();
     updateRadarLayer();
   } catch (e) {
     console.error("Errore caricamento dati MedioMeteo:", e);
@@ -295,22 +645,28 @@ function renderDashboard() {
   if (!pkg) return;
 
   const d = pkg.district;
+  const loc = pkg.location || d;
   const cur = pkg.nowcast.current;
   const conv = pkg.nowcast.ligurian_convergence;
   const landRisk = pkg.land.risk_assessment;
   const seaCond = pkg.sea.marine_conditions;
 
-  // 1. Header Banner
+  // Banner Superiore
   const pinSuffix = pkg.coordinates.is_custom_pin
-    ? ` (Pin Mappa: ${pkg.coordinates.lat.toFixed(3)}, ${pkg.coordinates.lon.toFixed(3)})`
+    ? ` (Coordinate: ${pkg.coordinates.lat.toFixed(4)}°N, ${pkg.coordinates.lon.toFixed(4)}°E)`
     : "";
-  document.getElementById("banner-district-name").textContent = `${d.name}${pinSuffix}`;
+  document.getElementById("banner-district-name").textContent = `${loc.name}${pinSuffix}`;
   setBadgeLevel(
     document.getElementById("banner-zone-tag"),
-    state.mode === "sea" ? seaCond.overall_level : landRisk.overall_level,
-    d.arpal_zone
+    state.mode === "sea" ? "physics" : landRisk.overall_level,
+    loc.arpal_zone || d.arpal_zone
   );
-  document.getElementById("banner-microclimate").textContent = d.microclimate_notes;
+  const typeTag = document.getElementById("banner-type-tag");
+  if (typeTag) {
+    typeTag.textContent = `${(loc.loc_type || "località").toUpperCase()} • ${loc.valley_or_sector || ""}`;
+  }
+  document.getElementById("banner-microclimate").textContent =
+    loc.shelter_notes || d.microclimate_notes;
 
   const convLevel =
     conv.convergence_score >= 65
@@ -329,27 +685,27 @@ function renderDashboard() {
   setBadgeLevel(
     document.getElementById("badge-confidence"),
     confLevel,
-    `Accordo Modelli LAM: ${cur.confidence_pct}%`
+    `Consenso 5 Modelli: ${cur.confidence_pct}%`
   );
 
-  // 2. Hero Card principale
   const genDate = new Date(pkg.generated_at);
   document.getElementById("timestamp-badge").textContent = `Aggiornato ${genDate.toLocaleTimeString(
     "it-IT",
     { hour: "2-digit", minute: "2-digit" }
-  )} (${pkg.sources.active.length} modelli attivi)`;
+  )}`;
 
+  // Tab 1: Riepilogo + Stazioni OMIRL + Idrometri + Webcam
   document.getElementById("main-weather-desc").textContent = cur.weather_description;
   document.getElementById("main-temp").textContent = `${cur.temp_c.toFixed(1)}°C`;
 
   if (state.mode === "sea") {
     document.getElementById(
       "main-wind-summary"
-    ).textContent = `${seaCond.wind.ligurian_name} (${seaCond.wind.cardinal}) ${seaCond.wind.speed_knots} kt • Raffica ${seaCond.wind.gust_knots} kt (F${seaCond.wind.beaufort.force} Beaufort)`;
+    ).textContent = `${seaCond.wind.ligurian_name} (${seaCond.wind.cardinal} ${seaCond.wind.direction_deg}°) ${seaCond.wind.speed_knots} kt (${seaCond.wind.speed_ms} m/s) • Raffica ${seaCond.wind.gust_knots} kt (F${seaCond.wind.beaufort.force} Beaufort)`;
   } else {
     document.getElementById(
       "main-wind-summary"
-    ).textContent = `${cur.wind_ligurian_name} (${cur.wind_cardinal}) ${cur.wind_kmh} km/h • Raffica ${cur.gust_kmh} km/h`;
+    ).textContent = `${cur.wind_ligurian_name} (${cur.wind_cardinal} ${cur.wind_dir_deg}°) ${cur.wind_kmh} km/h (${seaCond.wind.speed_knots} kt) • Raffica ${cur.gust_kmh} km/h`;
   }
 
   document.getElementById("pressure-value").textContent = `${cur.pressure_hpa} hPa`;
@@ -363,13 +719,14 @@ function renderDashboard() {
   ).textContent = `📍 Coordinate attive: ${pkg.coordinates.lat.toFixed(4)}°N, ${pkg.coordinates.lon.toFixed(4)}°E`;
 
   renderDynamicKPIs(cur, landRisk, seaCond);
+  renderOmirlObservationsAndWebcams(pkg.observations_live);
   renderNowcast15mStrip(pkg.nowcast.timeline_15m);
   renderLandAndSeaPanels(landRisk, seaCond, conv);
-  renderAIBulletin(state.aiBulletin);
+  render5ModelsHourlyTable(pkg.forecast.hourly_48h);
   renderCharts(pkg.forecast.hourly_48h);
   render7DayTable(pkg.forecast.daily_7d);
+  renderAIBulletinAndOfficialArpal(state.aiBulletin, pkg.official_bulletins?.arpal);
 
-  // Footer Meteomar & Disclaimers
   document.getElementById("meteomar-text").textContent = pkg.alerts.meteomar.bulletin;
   document.getElementById("disclaimer-land-text").textContent = pkg.land.safety_disclaimer;
   document.getElementById("disclaimer-sea-text").textContent = pkg.sea.safety_disclaimer;
@@ -378,75 +735,75 @@ function renderDashboard() {
 function renderDynamicKPIs(cur, landRisk, seaCond) {
   const grid = document.getElementById("kpi-dynamic-grid");
   const hydro = landRisk.hydrogeological;
+  const thermo = landRisk.thermo_comfort || {};
   const waves = seaCond.waves;
   const wind = seaCond.wind;
+  const coastal = seaCond.coastal_physics;
 
   const cards =
     state.mode === "sea"
       ? [
           {
-            label: "Vento & Raffica (Nodi)",
+            label: "Vento & Raffica (kt | m/s | km/h)",
             value: `${wind.speed_knots} / ${wind.gust_knots} kt`,
-            sub: `Forza ${wind.beaufort.force} Beaufort (${wind.beaufort.label})`,
+            sub: `${wind.speed_ms}/${wind.gust_ms} m/s • F${wind.beaufort.force} ${wind.beaufort.label}`,
           },
           {
-            label: "Onda Significativa / Max",
+            label: "Spettro Onda Hs / Hmax / H1000",
             value: `${waves.significant_height_m} / ${waves.max_height_m} m`,
-            sub: `Mare ${waves.douglas.label}`,
+            sub: `Picco 1/1000: ${waves.extreme_height_1_1000_m}m • ${waves.douglas.label}`,
           },
           {
-            label: "Periodo & Direzione Onda",
-            value: `${waves.peak_period_s} s (${waves.direction_cardinal})`,
-            sub: `Lunghezza L ≈ ${waves.wavelength_m} m`,
+            label: "Periodo Tp, Lunghezza L & Ripidità",
+            value: `${waves.peak_period_s} s (L=${waves.wavelength_m}m)`,
+            sub: `Ripidità H/L: ${waves.steepness_pct}% da ${waves.direction_cardinal}`,
           },
           {
-            label: "Onda Vento vs Swell",
+            label: "Onda Vento vs Swell Lungo",
             value: `${waves.wind_wave_height_m}m / ${waves.swell_height_m}m`,
-            sub: waves.steepness_warning
-              ? "⚠️ Onda corta ripida frangente"
-              : "Profilo d'onda regolare",
+            sub: `Vento ${waves.wind_wave_cardinal} (${waves.wind_wave_period_s}s) • Swell ${waves.swell_cardinal} (${waves.swell_period_s}s)`,
           },
           {
-            label: "Temp. Acqua (SST)",
-            value: `${waves.sea_surface_temp_c}°C`,
-            sub: `Visibilità: ${(cur.visibility_m / 1000).toFixed(1)} km`,
+            label: "Risacca in Rada & Marea",
+            value: `Frangente ${coastal.bay_surge.shore_breaker_height_m} m`,
+            sub: `Marea ${coastal.tides.current_height_cm} cm (${coastal.tides.current_phase})`,
           },
           {
-            label: "Picco Pioggia LAM",
-            value: `${hydro.precip_1h_mm} mm/h`,
-            sub: `Cumulata 24h: ${hydro.precip_24h_mm} mm`,
+            label: "Corrente, SST & Visibilità",
+            value: `${coastal.surface_current.speed_knots} kt (${coastal.surface_current.direction_cardinal})`,
+            sub: `Acqua ${waves.sea_surface_temp_c}°C • Visibilità ${coastal.visibility_nm} NM`,
           },
         ]
       : [
           {
-            label: "Intensità Pioggia (1h)",
+            label: "Intensità Pioggia (1h / Picco LAM)",
             value: `${hydro.precip_1h_mm} mm/h`,
-            sub: `Picco LAM: ${cur.precip_max_lam_mm} mm/h`,
+            sub: `Max AROME/ICON-D2: ${cur.precip_max_lam_mm} mm/h`,
           },
           {
-            label: "Cumulata 3h / 24h",
+            label: "Cumulata Pluviometrica 3h / 24h",
             value: `${hydro.precip_3h_mm} / ${hydro.precip_24h_mm} mm`,
             sub: hydro.label.split("—")[0],
           },
           {
-            label: "Vento & Raffica (Terra)",
+            label: "Vento & Raffica (km/h | kt)",
             value: `${cur.wind_kmh} / ${cur.gust_kmh} km/h`,
-            sub: `${wind.speed_knots} / ${wind.gust_knots} kt da ${cur.wind_cardinal}`,
+            sub: `${wind.speed_knots} / ${wind.gust_knots} kt da ${cur.wind_cardinal} (${cur.wind_dir_deg}°)`,
           },
           {
-            label: "Umidità & CAPE",
-            value: `${cur.humidity_pct}%`,
-            sub: `Energia CAPE: ${cur.cape_j_kg} J/kg`,
+            label: "Dew Point, Percepita & Maccaja",
+            value: `DP ${thermo.dew_point_c ?? "--"}°C (Perc. ${thermo.perceived_temp_c ?? cur.temp_c}°C)`,
+            sub: thermo.maccaja_status || `Umidità ${cur.humidity_pct}%`,
           },
           {
-            label: "Zero Termico & Visibilità",
-            value: `${landRisk.appennino_passes.freezing_level_m} m`,
-            sub: `Visibilità: ${(cur.visibility_m / 1000).toFixed(1)} km`,
+            label: "Zero Termico, UV & Radiazione",
+            value: `ZT ${landRisk.appennino_passes.freezing_level_m} m`,
+            sub: `UV ${thermo.uv_index ?? cur.uv_index} • Rad. ${thermo.solar_radiation_wm2 ?? cur.solar_radiation_wm2} W/m²`,
           },
           {
-            label: "Stato del Mare Antistante",
-            value: `Hs ${waves.significant_height_m} m @ ${waves.peak_period_s}s`,
-            sub: `Mare ${waves.douglas.label} (${waves.direction_cardinal})`,
+            label: "Fisica Mare Antistante",
+            value: `Hs ${waves.significant_height_m}m (Hmax ${waves.max_height_m}m)`,
+            sub: `Tp ${waves.peak_period_s}s da ${waves.direction_cardinal} • ${waves.douglas.label}`,
           },
         ];
 
@@ -457,6 +814,88 @@ function renderDynamicKPIs(cur, landRisk, seaCond) {
         <div class="kpi-label">${c.label}</div>
         <div class="kpi-value">${c.value}</div>
         <div class="kpi-sub">${c.sub}</div>
+      </div>
+    `
+    )
+    .join("");
+}
+
+function renderOmirlObservationsAndWebcams(obs) {
+  if (!obs) return;
+
+  // 1. Stazioni Meteo/Marine OMIRL
+  const stGrid = document.getElementById("omirl-stations-grid");
+  const stations = obs.nearest_weather_stations || [];
+  stGrid.innerHTML = stations
+    .map(
+      (st) => `
+      <div class="station-card">
+        <div class="station-header">
+          <div class="station-name">📡 ${st.name} <span style="color:var(--text-muted);font-size:0.74rem;">(${st.code})</span></div>
+          <span class="station-dist">📍 ${st.distance_km} km</span>
+        </div>
+        <div style="font-size:0.74rem;color:var(--text-muted);">${st.muni} • Quota ${st.elev_m} m • Ore ${st.observed_at}</div>
+        <div style="display:flex;justify-content:space-between;margin-top:0.25rem;font-size:0.84rem;">
+          <span>🌡️ <strong>${st.temp_c}°C</strong></span>
+          <span>🌧️ <strong>${st.precip_1h_mm} mm/h</strong></span>
+          <span>💨 <strong>${st.wind_knots} kt</strong> (raff. ${st.gust_knots} kt)</span>
+        </div>
+      </div>
+    `
+    )
+    .join("");
+
+  // 2. Idrometri Torrenti OMIRL
+  const hyGrid = document.getElementById("omirl-hydrometers-grid");
+  const hydros = obs.nearest_river_hydrometers || [];
+  hyGrid.innerHTML = hydros
+    .map((hy) => {
+      const pillClass = `level-${hy.status_level || "green"}`;
+      return `
+        <div class="station-card">
+          <div class="station-header">
+            <div class="station-name">🌊 ${hy.name}</div>
+            <span class="station-dist">📍 ${hy.distance_km} km</span>
+          </div>
+          <div style="font-size:0.74rem;color:var(--text-muted);">Bacino: <strong>${hy.river}</strong> (${hy.code}) • Ore ${hy.observed_at}</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.25rem;">
+            <span style="font-size:1.15rem;font-weight:800;color:#fff;">Livello: ${hy.level_m} m</span>
+            <span class="badge-pill ${pillClass}">${hy.status_level === "green" ? "REGOLARE" : "GUARDIA"}</span>
+          </div>
+          <div style="font-size:0.73rem;color:var(--text-muted);">
+            Soglie Ufficiali: Gialla <strong>${hy.warn_threshold_m} m</strong> • Rossa <strong>${hy.alarm_threshold_m} m</strong>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  // 3. Galleria Webcam Live
+  const camGrid = document.getElementById("live-webcams-grid");
+  const cams = obs.nearest_webcams || [];
+  camGrid.innerHTML = cams
+    .map(
+      (cam) => `
+      <div class="webcam-card">
+        <div class="webcam-preview">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span class="badge-pill level-physics">📷 LIVE WEBCAM</span>
+            <span style="font-size:0.75rem;font-weight:700;color:#38bdf8;">📍 a ${cam.distance_km} km</span>
+          </div>
+          <div>
+            <div style="font-size:0.95rem;font-weight:800;color:#fff;">${cam.name}</div>
+            <div style="font-size:0.76rem;color:#cbd5e1;margin-top:0.15rem;">🔭 Inquadratura: ${cam.view_direction}</div>
+          </div>
+        </div>
+        <div class="webcam-body">
+          <div style="display:flex;justify-content:space-between;color:var(--text-muted);font-size:0.74rem;">
+            <span>Fonte: ${cam.provider}</span>
+            <span>Aggiornamento: ${cam.timestamp_label}</span>
+          </div>
+          <a href="${cam.portal_url}" target="_blank" rel="noopener" class="btn-action" style="justify-content:center;margin-top:0.25rem;">
+            👁️ Apri Immagine / Stream Live Ufficiale ↗
+          </a>
+        </div>
       </div>
     `
     )
@@ -499,13 +938,10 @@ function renderLandAndSeaPanels(landRisk, seaCond, conv) {
     landRisk.overall_level,
     LEVEL_LABELS[landRisk.overall_level]
   );
-  setBadgeLevel(
-    document.getElementById("sea-overall-badge"),
-    seaCond.overall_level,
-    LEVEL_LABELS[seaCond.overall_level]
-  );
 
+  // Pannello TERRA: Fisica + Indicatori Operativi
   const landContainer = document.getElementById("land-risk-items");
+  const thermo = landRisk.thermo_comfort || {};
   const convBorder =
     conv.convergence_score >= 65
       ? "red"
@@ -516,7 +952,7 @@ function renderLandAndSeaPanels(landRisk, seaCond, conv) {
   landContainer.innerHTML = `
     <div class="risk-item border-${landRisk.hydrogeological.level}">
       <div class="risk-item-title">
-        <span>🌊 Bacini & Rischio Idrogeologico (Bisagno, Polcevera, Entella)</span>
+        <span>🌊 Bacini Idrografici & Sottopassi (Bisagno, Polcevera, Entella, Stura)</span>
         <span>${landRisk.hydrogeological.precip_1h_mm} mm/h</span>
       </div>
       <div class="risk-item-desc"><strong>${landRisk.hydrogeological.label}:</strong> ${landRisk.hydrogeological.advice}</div>
@@ -532,7 +968,7 @@ function renderLandAndSeaPanels(landRisk, seaCond, conv) {
 
     <div class="risk-item border-${landRisk.wind_viability.level}">
       <div class="risk-item-title">
-        <span>🛵 Viabilità Urbana, Sopraelevata & Viadotti Autostradali</span>
+        <span>🛵 Viabilità Urbana, Sopraelevata Aldo Moro & Viadotti A7/A10/A12/A26</span>
         <span>Raffica ${landRisk.wind_viability.gust_kmh} km/h</span>
       </div>
       <div class="risk-item-desc"><strong>${landRisk.wind_viability.label}:</strong> ${landRisk.wind_viability.advice}</div>
@@ -540,67 +976,290 @@ function renderLandAndSeaPanels(landRisk, seaCond, conv) {
 
     <div class="risk-item border-${landRisk.appennino_passes.level}">
       <div class="risk-item-title">
-        <span>🏔️ Valichi Appenninici (Giovi, Turchino, A7, A26, Val d'Aveto)</span>
+        <span>🏔️ Valichi Appenninici (Giovi, Turchino, Scoffera, Bocco, Faiallo)</span>
         <span>ZT ~${landRisk.appennino_passes.freezing_level_m} m</span>
       </div>
       <div class="risk-item-desc"><strong>${landRisk.appennino_passes.label}:</strong> ${landRisk.appennino_passes.advice}</div>
     </div>
+
+    <div class="risk-item border-physics">
+      <div class="risk-item-title">
+        <span>🌡️ Termo-Igrometria, Punto di Rugiada & Diagnostica Maccaja Ligure</span>
+        <span>DP ${thermo.dew_point_c ?? "--"}°C | UV ${thermo.uv_index ?? "--"}</span>
+      </div>
+      <div class="risk-item-desc">
+        Percepita: <strong>${thermo.perceived_temp_c ?? "--"}°C</strong> (${thermo.comfort_label || "Regolare"}) •
+        Humidex: ${thermo.humidex ?? "--"} • Windchill: ${thermo.windchill_c ?? "--"}°C •
+        Radiazione Solare: ${thermo.solar_radiation_wm2 ?? "--"} W/m² •
+        <strong>${thermo.maccaja_status || ""}</strong>
+      </div>
+    </div>
   `;
 
+  // Pannello MARE: SOLO Fisica Costiera & Oceanografica Pura (ZERO semafori soggettivi — ADR-0006)
   const seaContainer = document.getElementById("sea-risk-items");
-  const act = seaCond.activities_safety;
   const w = seaCond.waves;
+  const wind = seaCond.wind;
+  const cp = seaCond.coastal_physics;
+  const bs = cp.bay_surge;
+  const td = cp.tides;
+  const cur = cp.surface_current;
+
+  const tideExtremaStr = (td.extrema || [])
+    .slice(0, 4)
+    .map((ex) => `${ex.type === "HIGH" ? "▲ Alta" : "▼ Bassa"} ${ex.time} (${ex.height_cm} cm)`)
+    .join(" • ");
 
   seaContainer.innerHTML = `
-    <div class="risk-item border-${act.sailing_yachting.level}">
+    <div class="risk-item border-physics">
       <div class="risk-item-title">
-        <span>⛵ Piccolo Diporto & Vela (Golfo di Genova)</span>
-        <span>${act.sailing_yachting.label}</span>
+        <span>💨 Cinematica del Vento & Scala Beaufort</span>
+        <span>${wind.speed_knots} kt (Raffica ${wind.gust_knots} kt)</span>
       </div>
-      <div class="risk-item-desc">${act.sailing_yachting.note}</div>
+      <div class="risk-item-desc">
+        Direzione: <strong>${wind.cardinal} (${wind.direction_deg}° — ${wind.ligurian_name})</strong> •
+        Velocità: <strong>${wind.speed_knots} kt</strong> | <strong>${wind.speed_ms} m/s</strong> | <strong>${wind.speed_kmh} km/h</strong> •
+        Forza <strong>${wind.beaufort.force} Beaufort (${wind.beaufort.label})</strong>: <em>${wind.beaufort.sea_effect}</em>.
+      </div>
     </div>
 
-    <div class="risk-item border-${w.steepness_warning ? "yellow" : "green"}">
+    <div class="risk-item border-physics">
       <div class="risk-item-title">
-        <span>📐 Cinematica & Ripidità d'Onda (Hs ${w.significant_height_m}m / Hmax ${w.max_height_m}m)</span>
-        <span>Tp ${w.peak_period_s} s (${w.direction_cardinal})</span>
+        <span>🌊 Spettro Completo dell'Onda (Hs, Hmax, H1/1000, Periodo Tp & Ripidità)</span>
+        <span>Hs ${w.significant_height_m} m | Hmax ${w.max_height_m} m</span>
       </div>
-      <div class="risk-item-desc"><strong>${w.steepness_class}:</strong> Onda da vento ${w.wind_wave_height_m}m + Swell lungo ${w.swell_height_m}m. Lunghezza d'onda ${w.wavelength_m}m.</div>
+      <div class="risk-item-desc">
+        <strong>${w.douglas.label}:</strong> Onda significativa Hs <strong>${w.significant_height_m} m</strong>,
+        Onda massima statistica (Rayleigh) Hmax <strong>${w.max_height_m} m</strong>, Picco estremo H1/1000 <strong>${w.extreme_height_1_1000_m} m</strong>.<br>
+        Periodo di picco Tp <strong>${w.peak_period_s} s</strong> da <strong>${w.direction_cardinal} (${w.direction_deg}°)</strong> •
+        Lunghezza d'onda L = <strong>${w.wavelength_m} m</strong> • ${w.steepness_class}.
+      </div>
     </div>
 
-    <div class="risk-item border-${act.coastal_fishing.level}">
+    <div class="risk-item border-physics">
       <div class="risk-item-title">
-        <span>🎣 Pesca Sportiva & Costiera</span>
-        <span>${act.coastal_fishing.label}</span>
+        <span>🔀 Partizione Spettrale: Onda Viva da Vento vs Swell Lungo</span>
+        <span>Hwind ${w.wind_wave_height_m} m | Hswell ${w.swell_height_m} m</span>
       </div>
-      <div class="risk-item-desc">${act.coastal_fishing.note}</div>
+      <div class="risk-item-desc">
+        • <strong>Onda Viva da Vento Locale:</strong> ${w.wind_wave_height_m} m @ ${w.wind_wave_period_s} s da ${w.wind_wave_cardinal} (${w.wind_wave_dir_deg}°)<br>
+        • <strong>Swell Primario (Mare Lungo):</strong> ${w.swell_height_m} m @ ${w.swell_period_s} s da ${w.swell_cardinal} (${w.swell_dir_deg}°)
+      </div>
     </div>
 
-    <div class="risk-item border-${act.kayak_sup_swimming.level}">
+    <div class="risk-item border-physics">
       <div class="risk-item-title">
-        <span>🛶 Kayak, SUP, Deriva & Sicurezza Ormeggi</span>
-        <span>${act.kayak_sup_swimming.label}</span>
+        <span>🏖️ Fisica Costiera di Rada: Rifrazione (Kr), Shoaling (Ks) & Risacca a Riva</span>
+        <span>Frangente ${bs.shore_breaker_height_m} m</span>
       </div>
-      <div class="risk-item-desc">${act.kayak_sup_swimming.note} | <strong>Porti:</strong> ${act.harbor_mooring.label}.</div>
+      <div class="risk-item-desc">
+        Asse apertura cala: <strong>${bs.bay_open_axis_deg}°</strong> ( angolo incidenza swell Δ=${bs.swell_incidence_diff_deg}° — <em>${bs.exposure_geometry}</em>).<br>
+        Coeff. penetrazione Kr = <strong>${bs.refraction_kr}</strong> • Coeff. shoaling periodo Ks = <strong>${bs.shoaling_ks}</strong> •
+        Altezza fisica frangente/risacca a riva = <strong>${bs.shore_breaker_height_m} m</strong>.
+      </div>
+    </div>
+
+    <div class="risk-item border-physics">
+      <div class="risk-item-title">
+        <span>🌙 Curva di Marea, Corrente Superficiale & Visibilità Ottica</span>
+        <span>${td.current_height_cm} cm (${td.current_phase})</span>
+      </div>
+      <div class="risk-item-desc">
+        • <strong>Estremi di Marea:</strong> ${tideExtremaStr || "In calcolo"} (Escursione ${td.range_cm} cm)<br>
+        • <strong>Corrente Superficiale:</strong> <strong>${cur.speed_knots} kt</strong> (${cur.speed_ms} m/s) verso ${cur.direction_cardinal} (drift vento ${cur.wind_drift_component_knots} kt)<br>
+        • <strong>Temp. Acqua (SST):</strong> ${w.sea_surface_temp_c}°C • <strong>Visibilità Ottica:</strong> ${cp.visibility_nm} NM (${cp.visibility_m} m)
+      </div>
     </div>
   `;
 }
 
-function renderAIBulletin(bulletin) {
-  if (!bulletin) return;
-  const badge = document.getElementById("ai-engine-badge");
-  badge.textContent = bulletin.ai_powered
-    ? "✨ Google Gemini AI Advisor"
-    : "🧠 Motore Sinottico Ligure";
+function render5ModelsHourlyTable(hourly48) {
+  const tbody = document.getElementById("models-5-hourly-tbody");
+  if (!tbody || !hourly48 || !hourly48.length) return;
 
-  document.getElementById("ai-headline").textContent = bulletin.headline;
-  document.getElementById("ai-synoptic-body").textContent =
-    bulletin.synoptic_nowcast_analysis;
+  tbody.innerHTML = hourly48
+    .slice(0, 24)
+    .map((h) => {
+      const tLabel = (h.time.split("T")[1] || h.time).slice(0, 5);
+      const m = h.models || {};
+      const fmtM = (key) => {
+        const obj = m[key];
+        if (!obj || obj.wind_knots === null || obj.wind_knots === undefined) return "--";
+        return `<strong>${obj.wind_knots} kt</strong> <span style="color:var(--text-muted);font-size:0.72rem;">(r.${obj.gust_knots ?? "--"})</span>`;
+      };
+      const spreadKt = h.model_spread?.wind_spread_knots ?? 0;
+      const spreadColor = spreadKt >= 8 ? "#f97316" : spreadKt >= 5 ? "#fbbf24" : "#34d399";
 
-  const takeawaysGrid = document.getElementById("ai-takeaways-grid");
-  takeawaysGrid.innerHTML = (bulletin.key_takeaways || [])
-    .map((item) => `<div class="ai-takeaway-item">🔹 ${item}</div>`)
+      return `
+        <tr>
+          <td><strong>${tLabel}</strong></td>
+          <td><strong>${h.wind_knots} kt</strong> (${h.wind_kmh} km/h) ${h.wind_cardinal}</td>
+          <td>${fmtM("meteofrance_arome_france_hd")}</td>
+          <td>${fmtM("icon_d2")}</td>
+          <td>${fmtM("ecmwf_ifs025")}</td>
+          <td>${fmtM("gfs_seamless")}</td>
+          <td>${fmtM("met_norway")}</td>
+          <td style="color:${spreadColor};font-weight:700;">Δ ${spreadKt} kt</td>
+          <td>${h.precip_mm} mm <span style="color:#38bdf8;font-size:0.72rem;">(max ${h.precip_max_lam_mm})</span></td>
+          <td>Hs <strong>${h.wave_hs_m}m</strong> / Hmax ${h.wave_hmax_m}m @ ${h.wave_period_s}s</td>
+          <td>${h.shore_breaker_m} m</td>
+        </tr>
+      `;
+    })
     .join("");
+}
+
+async function calculateCoastalRoute() {
+  const origin = document.getElementById("route-origin")?.value || "portofino";
+  const dest = document.getElementById("route-dest")?.value || "san_fruttuoso";
+  const speed = document.getElementById("route-speed")?.value || "6.0";
+  const duration = document.getElementById("route-duration")?.value || "90";
+  const stop = document.getElementById("route-stop")?.value || "20";
+
+  const params = new URLSearchParams({
+    origin,
+    dest,
+    cruise_knots: speed,
+    duration_min: duration,
+    stop_min: stop,
+    round_trip: "true",
+  });
+
+  try {
+    const res = await fetch(`/api/v1/route-eta?${params.toString()}`);
+    if (!res.ok) return;
+    const plan = await res.json();
+    state.routePlan = plan;
+
+    const kpiGrid = document.getElementById("route-results-grid");
+    const cmp = plan.physical_comparison_outbound_vs_inbound || {};
+    kpiGrid.innerHTML = `
+      <div class="kpi-box">
+        <div class="kpi-label">Distanza Costiera (Andata / A+R)</div>
+        <div class="kpi-value">${plan.one_way_distance_nm} / ${plan.total_distance_nm} NM</div>
+        <div class="kpi-sub">Rotta su grafo che non taglia i capi</div>
+      </div>
+      <div class="kpi-box">
+        <div class="kpi-label">Tempo Navigazione Effettivo</div>
+        <div class="kpi-value">${plan.estimated_navigation_minutes} min</div>
+        <div class="kpi-sub">+ ${plan.planned_stop_minutes} min sosta = ${plan.estimated_total_minutes} min tot</div>
+      </div>
+      <div class="kpi-box">
+        <div class="kpi-label">Velocità Media Richiesta</div>
+        <div class="kpi-value">${plan.required_average_speed_knots} kt</div>
+        <div class="kpi-sub">Per rientrare in ${plan.planned_duration_minutes} min totali</div>
+      </div>
+      <div class="kpi-box">
+        <div class="kpi-label">Orario Limite Rientro (Turnaround)</div>
+        <div class="kpi-value" style="color:#fbbf24;">${plan.schedule.latest_turnaround_time}</div>
+        <div class="kpi-sub">ETA Dest: ${plan.schedule.eta_destination} • Rientro: ${plan.schedule.eta_return_origin}</div>
+      </div>
+    `;
+
+    const legsList = document.getElementById("route-legs-list");
+    const legsHtml = (plan.legs || [])
+      .map(
+        (leg, i) => `
+        <div class="risk-item border-physics">
+          <div class="risk-item-title">
+            <span>Tratta ${i + 1}: ${leg.from_name} → ${leg.to_name}</span>
+            <span>${leg.distance_nm} NM</span>
+          </div>
+          <div class="risk-item-desc">
+            ${
+              leg.amp_speed_limit_knots
+                ? `⚠️ <strong>Vincolo Area Marina Protetta (AMP Portofino):</strong> velocità limitata a <strong>max ${leg.amp_speed_limit_knots} kt</strong>`
+                : "Navigazione libera fuori dalle zone di riserva integrale/generale AMP."
+            }
+          </div>
+        </div>
+      `
+      )
+      .join("");
+
+    legsList.innerHTML =
+      `
+      <div class="risk-item border-green">
+        <div class="risk-item-title">
+          <span>🔄 Confronto Fisico Andata vs Ritorno</span>
+          <span>Partenza ${plan.schedule.departure_time}</span>
+        </div>
+        <div class="risk-item-desc">${cmp.delta_summary || ""}</div>
+      </div>
+    ` + legsHtml;
+
+    // Disegna anche la polilinea della rotta sulla Mappa Live
+    if (state.map && plan.waypoints) {
+      if (state.routePolyline) {
+        state.map.removeLayer(state.routePolyline);
+      }
+      const latlngs = plan.waypoints.map((w) => [w.lat, w.lon]);
+      state.routePolyline = L.polyline(latlngs, {
+        color: "#38bdf8",
+        weight: 4,
+        dashArray: "6, 6",
+      }).addTo(state.map);
+    }
+  } catch (e) {
+    console.error("Errore calcolo rotta:", e);
+  }
+}
+
+function renderAIBulletinAndOfficialArpal(bulletin, arpal) {
+  if (bulletin) {
+    const badge = document.getElementById("ai-engine-badge");
+    badge.textContent = bulletin.ai_powered
+      ? "✨ Google Gemini Analista Sinottico"
+      : "🧠 Motore Sinottico Fisico Ligure";
+
+    document.getElementById("ai-headline").textContent = bulletin.headline;
+    document.getElementById("ai-synoptic-body").textContent =
+      bulletin.synoptic_nowcast_analysis +
+      "\n\n" +
+      (bulletin.sea_operational_briefing || "");
+
+    const takeawaysGrid = document.getElementById("ai-takeaways-grid");
+    takeawaysGrid.innerHTML = (bulletin.key_takeaways || [])
+      .map((item) => `<div class="ai-takeaway-item">🔹 ${item}</div>`)
+      .join("");
+  }
+
+  const arpalBox = document.getElementById("arpal-bulletin-box");
+  const arpalBadge = document.getElementById("arpal-issued-badge");
+  if (!arpalBox || !arpal) return;
+
+  if (arpalBadge) {
+    arpalBadge.textContent = arpal.live_extracted ? "ARPAL LIVE" : "ARPAL SINTESI";
+  }
+
+  const daysHtml = (arpal.days || [])
+    .map(
+      (d) => `
+      <div class="risk-item border-physics">
+        <div class="risk-item-title">
+          <span>📅 ${d.label}</span>
+          <span>Zonizzazione Liguria</span>
+        </div>
+        <div class="risk-item-desc">
+          <strong>Meteo:</strong> ${d.forecast_text}<br>
+          <strong>Venti:</strong> ${d.winds}<br>
+          <strong>Mare:</strong> ${d.sea}
+        </div>
+      </div>
+    `
+    )
+    .join("");
+
+  arpalBox.innerHTML =
+    `
+    <div class="risk-item border-green">
+      <div class="risk-item-title">
+        <span>Situazione Sinottica Regionale (${arpal.source || "ARPAL"})</span>
+        <span>${arpal.issued_at || ""}</span>
+      </div>
+      <div class="risk-item-desc">${arpal.synoptic_situation || ""}</div>
+    </div>
+  ` + daysHtml;
 }
 
 function renderCharts(hourly48) {
@@ -616,7 +1275,9 @@ function renderCharts(hourly48) {
   const ecmwfRain = slice24.map((h) => h.models?.ecmwf_ifs025?.precip_mm ?? h.precip_mm);
   const consensusTemp = slice24.map((h) => h.temp_c);
 
-  const ctx1 = document.getElementById("chart-multimodel").getContext("2d");
+  const canvas1 = document.getElementById("chart-multimodel");
+  if (!canvas1) return;
+  const ctx1 = canvas1.getContext("2d");
   if (state.chartMultiModel) state.chartMultiModel.destroy();
 
   state.chartMultiModel = new Chart(ctx1, {
@@ -626,7 +1287,7 @@ function renderCharts(hourly48) {
       datasets: [
         {
           type: "line",
-          label: "Temp Consensus (°C)",
+          label: "Temp Consenso (°C)",
           data: consensusTemp,
           borderColor: "#f59e0b",
           backgroundColor: "rgba(245, 158, 11, 0.15)",
@@ -680,14 +1341,15 @@ function renderCharts(hourly48) {
     },
   });
 
-  // Secondo Grafico: Vento/Raffica + Altezza d'Onda Significativa e Massima
   const useKnots = state.mode === "sea";
   const windSeries = slice24.map((h) => (useKnots ? h.wind_knots : h.wind_kmh));
   const gustSeries = slice24.map((h) => (useKnots ? h.gust_knots : h.gust_kmh));
   const waveHsSeries = slice24.map((h) => h.wave_hs_m);
   const waveHmaxSeries = slice24.map((h) => h.wave_hmax_m);
 
-  const ctx2 = document.getElementById("chart-wind-wave").getContext("2d");
+  const canvas2 = document.getElementById("chart-wind-wave");
+  if (!canvas2) return;
+  const ctx2 = canvas2.getContext("2d");
   if (state.chartWindWave) state.chartWindWave.destroy();
 
   state.chartWindWave = new Chart(ctx2, {
@@ -724,7 +1386,7 @@ function renderCharts(hourly48) {
           borderWidth: 2.5,
         },
         {
-          label: "Onda Max Stimata Hmax (m)",
+          label: "Onda Max Statistica Hmax (m)",
           data: waveHmaxSeries,
           borderColor: "#a855f7",
           borderDash: [2, 2],
@@ -767,10 +1429,7 @@ function renderCharts(hourly48) {
 
 function render7DayTable(days) {
   const tbody = document.getElementById("daily-7d-tbody");
-  if (!days || !days.length) {
-    tbody.innerHTML = `<tr><td colspan="7">Previsione giornaliera non disponibile</td></tr>`;
-    return;
-  }
+  if (!tbody || !days || !days.length) return;
 
   tbody.innerHTML = days
     .map((d) => {

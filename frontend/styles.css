@@ -1,5 +1,5 @@
 /* ==========================================================================
-   MedioMeteo Genova — Stili Sala Operativa Terra & Mare (ADR-0004)
+   MedioMeteo Genova v2.0 — Sala Operativa Terra & Mare a 6 Schede Chiuse (ADR-0006)
    Applies modern-web-guidance: dark-mode (:root color-scheme, scrollbar-width)
    and improve-text-layout-and-legibility (targeted text-wrap: balance / pretty)
    ========================================================================== */
@@ -8,10 +8,10 @@
   color-scheme: dark light;
   --bg-primary: #06101e;
   --bg-secondary: #0c1b2e;
-  --bg-card: rgba(14, 30, 52, 0.86);
-  --bg-card-hover: rgba(20, 42, 72, 0.94);
+  --bg-card: rgba(13, 28, 49, 0.88);
+  --bg-card-hover: rgba(19, 41, 71, 0.96);
   --border-subtle: rgba(100, 165, 255, 0.18);
-  --border-highlight: rgba(56, 189, 248, 0.45);
+  --border-highlight: rgba(56, 189, 248, 0.48);
   --text-main: #f0f6fc;
   --text-muted: #94a3b8;
   --accent-land: #10b981;
@@ -50,7 +50,7 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
-  background: radial-gradient(circle at 15% 10%, #0f2544 0%, #06101e 65%);
+  background: radial-gradient(circle at 15% 10%, #0f2544 0%, #06101e 68%);
   color: var(--text-main);
   line-height: 1.5;
   min-height: 100vh;
@@ -65,20 +65,20 @@ p, li, .pretty-copy {
   text-wrap: pretty;
 }
 
-/* Top Navigation & Mode Switcher */
+/* Top Navigation & Searchable 118-Location Selector */
 .topbar {
   position: sticky;
   top: 0;
-  z-index: 1100;
-  background: rgba(6, 16, 30, 0.92);
+  z-index: 1200;
+  background: rgba(6, 16, 30, 0.94);
   backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border-subtle);
-  padding: 0.75rem 1.25rem;
+  padding: 0.7rem 1.15rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.85rem;
 }
 
 .brand {
@@ -99,13 +99,13 @@ p, li, .pretty-copy {
 }
 
 .brand-title {
-  font-size: 1.15rem;
+  font-size: 1.12rem;
   font-weight: 800;
   color: #fff;
 }
 
 .brand-subtitle {
-  font-size: 0.76rem;
+  font-size: 0.74rem;
   color: var(--text-muted);
 }
 
@@ -113,7 +113,7 @@ p, li, .pretty-copy {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.55rem;
 }
 
 .mode-switch {
@@ -121,22 +121,22 @@ p, li, .pretty-copy {
   background: #091526;
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
-  padding: 0.22rem;
+  padding: 0.2rem;
 }
 
 .mode-btn {
   border: none;
   background: transparent;
   color: var(--text-muted);
-  padding: 0.45rem 0.95rem;
+  padding: 0.42rem 0.85rem;
   border-radius: 8px;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: all 0.16s ease;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
 }
 
 .mode-btn.active-land {
@@ -151,15 +151,36 @@ p, li, .pretty-copy {
   box-shadow: 0 2px 10px rgba(56, 189, 248, 0.35);
 }
 
+.search-input {
+  background: #091628;
+  color: var(--text-main);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  padding: 0.46rem 0.75rem;
+  font-size: 0.82rem;
+  width: 175px;
+}
+
+.select-filter {
+  background: #091628;
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  padding: 0.46rem 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
 .select-district {
   background: #0c1b2e;
   color: var(--text-main);
   border: 1px solid var(--border-highlight);
   border-radius: 9px;
-  padding: 0.5rem 0.85rem;
-  font-size: 0.86rem;
+  padding: 0.46rem 0.75rem;
+  font-size: 0.84rem;
   font-weight: 600;
-  min-width: 260px;
+  min-width: 245px;
+  max-width: 320px;
 }
 
 .btn-action {
@@ -167,31 +188,101 @@ p, li, .pretty-copy {
   color: #7dd3fc;
   border: 1px solid rgba(56, 189, 248, 0.35);
   border-radius: 9px;
-  padding: 0.48rem 0.85rem;
-  font-size: 0.82rem;
+  padding: 0.45rem 0.78rem;
+  font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s ease;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .btn-action:hover {
-  background: rgba(56, 189, 248, 0.26);
+  background: rgba(56, 189, 248, 0.28);
+}
+
+/* 6 Mutually Exclusive Closed Tabs Navigation Bar ("Schede Chiuse" ADR-0006) */
+.tabs-nav {
+  position: sticky;
+  top: 63px;
+  z-index: 1150;
+  background: rgba(8, 19, 36, 0.95);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0.45rem 1.15rem;
+  display: flex;
+  gap: 0.45rem;
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+}
+
+.tab-btn {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(14, 30, 52, 0.7);
+  color: var(--text-muted);
+  padding: 0.52rem 0.95rem;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.16s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tab-btn:hover {
+  color: #fff;
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+.tab-btn.active {
+  background: linear-gradient(135deg, rgba(2, 132, 199, 0.35), rgba(16, 185, 129, 0.28));
+  color: #fff;
+  border-color: var(--accent-active);
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.25);
+}
+
+/* Closed Tab Panels: ONLY ONE visible at a time */
+.tab-panel {
+  display: none;
+  flex-direction: column;
+  gap: 1.1rem;
+  animation: fadeTab 0.18s ease-out;
+}
+
+.tab-panel.active {
+  display: flex;
+}
+
+@keyframes fadeTab {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Main Container */
 .container {
-  max-width: 1440px;
+  max-width: 1460px;
   margin: 0 auto;
-  padding: 1.15rem;
+  padding: 1rem 1.15rem 2rem;
   display: flex;
   flex-direction: column;
-  gap: 1.15rem;
+  gap: 1rem;
 }
 
-/* Status Banner & Active Alerts */
+/* Status Banner */
 .alert-banner {
   border-radius: 12px;
-  padding: 0.85rem 1.1rem;
+  padding: 0.75rem 1.05rem;
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
   display: flex;
@@ -204,10 +295,10 @@ p, li, .pretty-copy {
 .badge-pill {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.25rem 0.7rem;
+  gap: 0.32rem;
+  padding: 0.22rem 0.65rem;
   border-radius: 999px;
-  font-size: 0.75rem;
+  font-size: 0.73rem;
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -236,39 +327,34 @@ p, li, .pretty-copy {
   border: 1px solid rgba(239, 68, 68, 0.6);
 }
 
-/* Top Grid: Current KPI + Interactive Map */
-.hero-grid {
-  display: grid;
-  grid-template-columns: 1.15fr 1fr;
-  gap: 1.15rem;
+.level-physics {
+  background: rgba(56, 189, 248, 0.15);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.4);
 }
 
-@media (max-width: 1024px) {
-  .hero-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
+/* Cards & Grids */
 .card {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: 14px;
-  padding: 1.15rem;
+  padding: 1.1rem;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
 }
 
 .card-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-bottom: 0.9rem;
-  padding-bottom: 0.6rem;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.55rem;
   border-bottom: 1px solid rgba(148, 163, 184, 0.12);
 }
 
 .card-title {
-  font-size: 0.98rem;
+  font-size: 0.96rem;
   font-weight: 700;
   color: #e2e8f0;
   display: flex;
@@ -276,67 +362,144 @@ p, li, .pretty-copy {
   gap: 0.45rem;
 }
 
-/* KPI Grid inside Hero Card */
+.dual-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  gap: 1.1rem;
+}
+
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
-  gap: 0.75rem;
-  margin-top: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.7rem;
+  margin-top: 0.75rem;
 }
 
 .kpi-box {
-  background: rgba(9, 21, 38, 0.75);
-  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(9, 21, 38, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.15);
   border-radius: 11px;
-  padding: 0.75rem;
+  padding: 0.72rem;
 }
 
 .kpi-label {
-  font-size: 0.73rem;
+  font-size: 0.71rem;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .kpi-value {
-  font-size: 1.45rem;
+  font-size: 1.35rem;
   font-weight: 800;
-  margin: 0.2rem 0;
+  margin: 0.18rem 0;
   color: #fff;
 }
 
 .kpi-sub {
-  font-size: 0.76rem;
+  font-size: 0.75rem;
   color: #cbd5e1;
 }
 
-/* Map Card */
+/* Tab 3: Interactive Full Map + Radar Player */
 #genova-map {
   width: 100%;
-  height: 360px;
-  border-radius: 11px;
+  height: 540px;
+  border-radius: 12px;
   border: 1px solid var(--border-subtle);
   background: #071324;
 }
 
-.map-toolbar {
+.radar-player-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
-  margin-top: 0.65rem;
-  font-size: 0.78rem;
-  color: var(--text-muted);
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.9rem;
+  background: rgba(9, 21, 38, 0.85);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
 }
 
-/* Dual Mode Panels (Terra vs Mare) */
-.dual-grid {
+.radar-slider {
+  flex: 1;
+  min-width: 160px;
+}
+
+/* Tab 1: Live OMIRL Stations, River Hydrometers & Webcam Gallery */
+.stations-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
-  gap: 1.15rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.75rem;
 }
 
+.station-card {
+  background: rgba(9, 21, 38, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 11px;
+  padding: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.station-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+.station-name {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.station-dist {
+  font-size: 0.73rem;
+  color: #38bdf8;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.webcam-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: 0.9rem;
+}
+
+.webcam-card {
+  background: rgba(9, 21, 38, 0.86);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.webcam-preview {
+  height: 165px;
+  background: linear-gradient(145deg, #0b223e, #071222);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0.75rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.webcam-body {
+  padding: 0.75rem 0.85rem;
+  font-size: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+/* Risk & Physics Items */
 .risk-list {
   display: flex;
   flex-direction: column;
@@ -344,7 +507,7 @@ p, li, .pretty-copy {
 }
 
 .risk-item {
-  background: rgba(9, 21, 38, 0.72);
+  background: rgba(9, 21, 38, 0.75);
   border-radius: 10px;
   padding: 0.75rem 0.9rem;
   border-left: 4px solid var(--accent-active);
@@ -354,14 +517,16 @@ p, li, .pretty-copy {
 .risk-item.border-yellow { border-left-color: var(--status-yellow); }
 .risk-item.border-orange { border-left-color: var(--status-orange); }
 .risk-item.border-red { border-left-color: var(--status-red); }
+.risk-item.border-physics { border-left-color: var(--accent-active); }
 
 .risk-item-title {
   font-size: 0.85rem;
   font-weight: 700;
-  margin-bottom: 0.2rem;
+  margin-bottom: 0.22rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.5rem;
 }
 
 .risk-item-desc {
@@ -374,7 +539,7 @@ p, li, .pretty-copy {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(105px, 1fr);
-  gap: 0.6rem;
+  gap: 0.55rem;
   overflow-x: auto;
   padding-bottom: 0.4rem;
   scrollbar-gutter: stable;
@@ -384,32 +549,32 @@ p, li, .pretty-copy {
   background: rgba(9, 21, 38, 0.82);
   border: 1px solid rgba(148, 163, 184, 0.15);
   border-radius: 10px;
-  padding: 0.65rem;
+  padding: 0.6rem;
   text-align: center;
 }
 
 .nowcast-time {
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 700;
   color: #38bdf8;
 }
 
 .nowcast-temp {
-  font-size: 1.1rem;
+  font-size: 1.08rem;
   font-weight: 800;
-  margin: 0.25rem 0;
+  margin: 0.2rem 0;
 }
 
 .nowcast-meta {
-  font-size: 0.73rem;
+  font-size: 0.72rem;
   color: var(--text-muted);
 }
 
-/* Charts section */
+/* Charts & Tables */
 .charts-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1.15rem;
+  gap: 1.1rem;
 }
 
 @media (max-width: 980px) {
@@ -424,7 +589,6 @@ p, li, .pretty-copy {
   width: 100%;
 }
 
-/* 7-Day Table */
 .table-responsive {
   overflow-x: auto;
 }
@@ -432,24 +596,56 @@ p, li, .pretty-copy {
 .forecast-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.84rem;
+  font-size: 0.81rem;
 }
 
 .forecast-table th,
 .forecast-table td {
-  padding: 0.68rem 0.75rem;
+  padding: 0.6rem 0.68rem;
   text-align: left;
   border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  white-space: nowrap;
 }
 
 .forecast-table th {
   color: var(--text-muted);
-  font-weight: 600;
-  font-size: 0.75rem;
+  font-weight: 700;
+  font-size: 0.72rem;
   text-transform: uppercase;
+  background: rgba(6, 16, 30, 0.55);
 }
 
-/* AI Bulletin Box */
+/* Tab 5: Coastal Route Calculator & Smartwatch Preview */
+.route-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.form-field label {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.form-input {
+  background: #091628;
+  color: var(--text-main);
+  border: 1px solid var(--border-highlight);
+  border-radius: 8px;
+  padding: 0.48rem 0.65rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+/* AI Bulletin & Official Bulletins */
 .ai-card {
   background: linear-gradient(135deg, rgba(14, 35, 64, 0.92), rgba(10, 46, 54, 0.88));
   border: 1px solid rgba(56, 189, 248, 0.38);
@@ -470,15 +666,14 @@ p, li, .pretty-copy {
   font-size: 0.8rem;
 }
 
-/* Footer Disclaimers */
 .footer-disclaimer {
-  font-size: 0.75rem;
+  font-size: 0.74rem;
   color: var(--text-muted);
   background: rgba(6, 16, 30, 0.85);
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
-  padding: 0.85rem 1.1rem;
+  padding: 0.8rem 1.05rem;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.3rem;
 }

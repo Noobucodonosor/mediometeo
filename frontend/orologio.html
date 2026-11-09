@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- MANDATORY per modern-web-guidance (dark-mode) -->
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#000000">
+  <title>MedioMeteo Genova — Vista Smartwatch & HUD da Polso (/orologio)</title>
+  <style>
+    :root {
+      color-scheme: dark light;
+      --bg-oled: #000000;
+      --card-oled: #0a1424;
+      --border-oled: #1e3a5f;
+      --text-bright: #ffffff;
+      --text-dim: #94a3b8;
+      --accent-cyan: #38bdf8;
+      --accent-green: #10b981;
+      --accent-amber: #fbbf24;
+      scrollbar-width: thin;
+      scrollbar-color: #334155 #000000;
+    }
+
+    @supports not (scrollbar-color: auto) {
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+      ::-webkit-scrollbar-track { background: #000000; }
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      background: var(--bg-oled);
+      color: var(--text-bright);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      padding: 0.75rem;
+    }
+
+    h1, h2 { text-wrap: balance; }
+    p { text-wrap: pretty; }
+
+    .watch-shell {
+      width: 100%;
+      max-width: 380px;
+      background: var(--card-oled);
+      border: 2px solid var(--border-oled);
+      border-radius: 26px;
+      padding: 0.9rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+      box-shadow: 0 0 28px rgba(56, 189, 248, 0.18);
+    }
+
+    .watch-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.75rem;
+      color: var(--accent-cyan);
+      font-weight: 800;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      padding-bottom: 0.4rem;
+    }
+
+    .hud-select-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.4rem;
+    }
+
+    select {
+      background: #040b14;
+      color: #fff;
+      border: 1px solid var(--accent-cyan);
+      border-radius: 8px;
+      padding: 0.35rem;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    .hud-big-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+    }
+
+    .hud-tile {
+      background: #040911;
+      border: 1px solid rgba(56, 189, 248, 0.28);
+      border-radius: 12px;
+      padding: 0.55rem;
+      text-align: center;
+    }
+
+    .hud-label {
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .hud-val {
+      font-size: 1.35rem;
+      font-weight: 900;
+      margin: 0.12rem 0;
+    }
+
+    .hud-sub {
+      font-size: 0.68rem;
+      color: var(--accent-cyan);
+    }
+
+    .turnaround-box {
+      background: rgba(251, 191, 36, 0.12);
+      border: 1px solid var(--accent-amber);
+      border-radius: 12px;
+      padding: 0.55rem 0.7rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .btn-back {
+      display: inline-block;
+      margin-top: 0.4rem;
+      text-align: center;
+      color: var(--accent-cyan);
+      text-decoration: none;
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 0.45rem;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+  <main class="watch-shell" aria-label="Smartwatch HUD Nautico Golfo di Genova">
+    <div class="watch-top">
+      <span>⌚ MEDIOMETEO HUD</span>
+      <span id="watch-clock">--:--:--</span>
+    </div>
+
+    <div class="hud-select-row">
+      <select id="watch-origin" aria-label="Porto di partenza"></select>
+      <select id="watch-dest" aria-label="Cala di destinazione"></select>
+    </div>
+
+    <div class="hud-big-grid">
+      <div class="hud-tile">
+        <div class="hud-label">Vento Reale</div>
+        <div class="hud-val" id="hud-wind">-- kt</div>
+        <div class="hud-sub" id="hud-wind-sub">Raffica -- kt</div>
+      </div>
+      <div class="hud-tile">
+        <div class="hud-label">Onda Hs / Hmax</div>
+        <div class="hud-val" id="hud-wave">-- m</div>
+        <div class="hud-sub" id="hud-wave-sub">Tp -- s</div>
+      </div>
+      <div class="hud-tile">
+        <div class="hud-label">Distanza A+R</div>
+        <div class="hud-val" id="hud-dist">-- NM</div>
+        <div class="hud-sub" id="hud-nav-time">Nav -- min</div>
+      </div>
+      <div class="hud-tile">
+        <div class="hud-label">Nodi Richiesti</div>
+        <div class="hud-val" id="hud-req-kt" style="color:var(--accent-green);">-- kt</div>
+        <div class="hud-sub" id="hud-risacca">Risacca -- m</div>
+      </div>
+    </div>
+
+    <div class="turnaround-box">
+      <div>
+        <div class="hud-label" style="color:var(--accent-amber);">Inversione Rotta (Turnaround)</div>
+        <div id="hud-route-label" style="font-size:0.75rem;color:#e2e8f0;">Portofino ↔ San Fruttuoso</div>
+      </div>
+      <div id="hud-turnaround" style="font-size:1.35rem;font-weight:900;color:var(--accent-amber);">--:--</div>
+    </div>
+
+    <a href="/" class="btn-back">⬅ Torna alla Sala Operativa Completa</a>
+  </main>
+
+  <script>
+    function updateClock() {
+      const now = new Date();
+      document.getElementById("watch-clock").textContent = now.toLocaleTimeString("it-IT");
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    async function initWatch() {
+      const locRes = await fetch("/api/v1/locations");
+      const locData = await locRes.json();
+      const waypoints = locData.coastal_waypoints || [];
+
+      const selO = document.getElementById("watch-origin");
+      const selD = document.getElementById("watch-dest");
+      waypoints.forEach((wp) => {
+        const o1 = document.createElement("option");
+        o1.value = wp.id;
+        o1.textContent = wp.name;
+        const o2 = o1.cloneNode(true);
+        selO.appendChild(o1);
+        selD.appendChild(o2);
+      });
+      selO.value = "portofino";
+      selD.value = "san_fruttuoso";
+
+      selO.addEventListener("change", refreshHud);
+      selD.addEventListener("change", refreshHud);
+      await refreshHud();
+    }
+
+    async function refreshHud() {
+      const origin = document.getElementById("watch-origin").value || "portofino";
+      const dest = document.getElementById("watch-dest").value || "san_fruttuoso";
+
+      const [routeRes, marineRes] = await Promise.all([
+        fetch(`/api/v1/route-eta?origin=${origin}&dest=${dest}&cruise_knots=6&duration_min=90&stop_min=20`),
+        fetch(`/api/v1/marine?location=SEA-BAIA-DI-SAN-FRUTTUOSO-DI-CAPODIMONTE-(AMP-ZONA-B)`),
+      ]);
+
+      if (routeRes.ok) {
+        const plan = await routeRes.json();
+        document.getElementById("hud-dist").textContent = `${plan.total_distance_nm} NM`;
+        document.getElementById("hud-nav-time").textContent = `Nav ${plan.estimated_navigation_minutes} min`;
+        document.getElementById("hud-req-kt").textContent = `${plan.required_average_speed_knots} kt`;
+        document.getElementById("hud-turnaround").textContent = plan.schedule.latest_turnaround_time;
+        document.getElementById("hud-route-label").textContent = `${plan.origin.name} ↔ ${plan.destination.name}`;
+      }
+
+      if (marineRes.ok) {
+        const m = await marineRes.json();
+        const cur = m.current_marine;
+        document.getElementById("hud-wind").textContent = `${cur.wind.speed_knots} kt`;
+        document.getElementById("hud-wind-sub").textContent = `${cur.wind.cardinal} • Raff. ${cur.wind.gust_knots} kt`;
+        document.getElementById("hud-wave").textContent = `${cur.waves.significant_height_m}/${cur.waves.max_height_m}m`;
+        document.getElementById("hud-wave-sub").textContent = `Tp ${cur.waves.peak_period_s}s (${cur.waves.direction_cardinal})`;
+        document.getElementById("hud-risacca").textContent = `Risacca ${cur.coastal_physics.bay_surge.shore_breaker_height_m}m`;
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", initWatch);
+  </script>
+</body>
+</html>
