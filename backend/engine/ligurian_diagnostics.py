@@ -162,6 +162,53 @@ def detect_ligurian_convergence(
     }
 
 
+def compute_thermo_hygrometric_indices(
+    temp_c: float,
+    humidity_pct: float,
+    wind_kmh: float,
+    cloud_cover_pct: float = 40.0,
+    pressure_hpa: float = 1015.0,
+) -> dict[str, Any]:
+    """Calcola Punto di Rugiada (Dew Point), Humidex, Windchill e diagnosi della 'Maccaja Ligure'."""
+    rh = max(1.0, min(100.0, float(humidity_pct)))
+    # Formula di Magnus-Tetens per il Punto di Rugiada (Dew Point)
+    a, b = 17.27, 237.7
+    alpha = ((a * temp_c) / (b + temp_c)) + math.log(rh / 100.0)
+    dew_point_c = round((b * alpha) / (a - alpha), 1)
+
+    # Humidex canadese / indice di disagio estivo
+    e_vap = 6.11 * math.exp(5417.7530 * ((1.0 / 273.16) - (1.0 / (273.15 + dew_point_c))))
+    humidex = round(temp_c + 0.5555 * (e_vap - 10.0), 1)
+
+    # Windchill invernale (valido per T <= 10°C e vento >= 4.8 km/h)
+    if temp_c <= 10.0 and wind_kmh >= 4.8:
+        v_pow = wind_kmh ** 0.16
+        windchill_c = round(
+            13.12 + 0.6215 * temp_c - 11.37 * v_pow + 0.3965 * temp_c * v_pow, 1
+        )
+    else:
+        windchill_c = round(temp_c, 1)
+
+    perceived_c = humidex if temp_c >= 23.0 else (windchill_c if temp_c <= 10.0 else round(temp_c, 1))
+
+    # Rilevamento del regime tipico di "Maccaja Ligure" (copertura stratocumuliforme marittima sotto inversione con alta pressione/umidità)
+    is_maccaja = cloud_cover_pct >= 70 and rh >= 75 and pressure_hpa >= 1014.0 and wind_kmh <= 22.0
+    maccaja_status = (
+        "ATTIVA — Nubi basse marittime da inversione ('Maccaja' sottocosta)"
+        if is_maccaja
+        else "Assente"
+    )
+
+    return {
+        "dew_point_c": dew_point_c,
+        "perceived_temp_c": perceived_c,
+        "humidex_c": humidex,
+        "windchill_c": windchill_c,
+        "maccaja_active": is_maccaja,
+        "maccaja_status": maccaja_status,
+    }
+
+
 def evaluate_land_risk(
     precip_1h_mm: float,
     precip_3h_mm: float,
@@ -172,6 +219,11 @@ def evaluate_land_risk(
     visibility_m: float,
     convergence_score: int,
     elevation_m: int = 20,
+    humidity_pct: float = 70.0,
+    cloud_cover_pct: float = 40.0,
+    pressure_hpa: float = 1015.0,
+    uv_index: float = 2.0,
+    shortwave_radiation_wm2: float = 180.0,
 ) -> dict[str, Any]:
     """Valuta gli indici di rischio per le persone a TERRA nella Provincia di Genova."""
     # 1. Rischio Idrogeologico & Pluviometrico (Torrenti Bisagno, Polcevera, Entella, rii minori)
@@ -238,6 +290,14 @@ def evaluate_land_risk(
         [hydro_level, wind_level, mountain_level], key=lambda x: priority_order[x]
     )
 
+    thermo = compute_thermo_hygrometric_indices(
+        temp_c=temp_c,
+        humidity_pct=humidity_pct,
+        wind_kmh=wind_kmh,
+        cloud_cover_pct=cloud_cover_pct,
+        pressure_hpa=pressure_hpa,
+    )
+
     return {
         "overall_level": overall_level,
         "hydrogeological": {
@@ -261,5 +321,10 @@ def evaluate_land_risk(
             "advice": mountain_advice,
             "freezing_level_m": freezing_level_m,
             "visibility_m": int(visibility_m),
+        },
+        "microclimate_comfort": {
+            **thermo,
+            "uv_index": round(uv_index, 1),
+            "solar_radiation_wm2": round(shortwave_radiation_wm2, 0),
         },
     }

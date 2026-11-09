@@ -16,6 +16,11 @@ from typing import Any
 import httpx
 
 from backend.config import get_settings
+from backend.engine.omirl_arpal import (
+    fetch_arpal_official_bulletins,
+    fetch_metno_compact,
+    fetch_omirl_live_observations,
+)
 
 
 OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
@@ -46,9 +51,10 @@ async def fetch_open_meteo_multimodel(
         ),
         "forecast_minutely_15": 16,  # 4 ore a step di 15 minuti per il Nowcasting
         "hourly": (
-            "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation_probability,"
-            "precipitation,weather_code,pressure_msl,cloud_cover,visibility,"
-            "wind_speed_10m,wind_direction_10m,wind_gusts_10m,cape"
+            "temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,"
+            "precipitation_probability,precipitation,weather_code,pressure_msl,"
+            "cloud_cover,visibility,wind_speed_10m,wind_direction_10m,"
+            "wind_gusts_10m,cape,uv_index,shortwave_radiation"
         ),
         "daily": (
             "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,"
@@ -73,11 +79,14 @@ async def fetch_open_meteo_marine(
         "current": (
             "wave_height,wave_direction,wave_period,wind_wave_height,"
             "wind_wave_direction,wind_wave_period,swell_wave_height,"
-            "swell_wave_direction,swell_wave_period,sea_surface_temperature"
+            "swell_wave_direction,swell_wave_period,ocean_current_velocity,"
+            "ocean_current_direction,sea_surface_temperature"
         ),
         "hourly": (
             "wave_height,wave_direction,wave_period,wind_wave_height,"
-            "swell_wave_height,swell_wave_period,sea_surface_temperature"
+            "wind_wave_direction,wind_wave_period,swell_wave_height,"
+            "swell_wave_direction,swell_wave_period,sea_level_height_msl,"
+            "ocean_current_velocity,ocean_current_direction,sea_surface_temperature"
         ),
         "daily": "wave_height_max,wave_direction_dominant,wave_period_max",
         "forecast_days": 7,
@@ -192,10 +201,21 @@ async def fetch_all_raw_sources(
             fetch_open_meteo_marine(client, sea_lat, sea_lon),
             fetch_rainviewer_radar(client),
             fetch_optional_commercial_sources(client, lat, lon, sea_lat, sea_lon),
+            fetch_metno_compact(client, lat, lon),
+            fetch_arpal_official_bulletins(client),
+            fetch_omirl_live_observations(client, lat, lon),
             return_exceptions=True,
         )
 
-    multimodel_raw, marine_raw, radar_raw, commercial_raw = results
+    (
+        multimodel_raw,
+        marine_raw,
+        radar_raw,
+        commercial_raw,
+        metno_raw,
+        arpal_raw,
+        omirl_raw,
+    ) = results
 
     if isinstance(multimodel_raw, Exception) or not isinstance(multimodel_raw, dict):
         sources_degraded.append("open_meteo_multimodel")
@@ -236,11 +256,32 @@ async def fetch_all_raw_sources(
     else:
         commercial_raw = {}
 
+    if isinstance(metno_raw, Exception) or not isinstance(metno_raw, dict):
+        sources_degraded.append("met_norway")
+        metno_raw = {}
+    else:
+        sources_active.append("met_norway_nordic")
+
+    if isinstance(arpal_raw, Exception) or not isinstance(arpal_raw, dict):
+        sources_degraded.append("arpal_liguria_bulletins")
+        arpal_raw = {}
+    else:
+        sources_active.append("arpal_liguria_official")
+
+    if isinstance(omirl_raw, Exception) or not isinstance(omirl_raw, dict):
+        sources_degraded.append("omirl_stations_webcams")
+        omirl_raw = {}
+    else:
+        sources_active.append("omirl_regione_liguria_sensors")
+
     return {
         "multimodel": multimodel_raw,
         "marine": marine_raw,
         "radar": radar_raw,
         "commercial": commercial_raw,
+        "metno": metno_raw,
+        "arpal_bulletins": arpal_raw,
+        "omirl_observations": omirl_raw,
         "sources_active": sources_active,
         "sources_degraded": sources_degraded,
     }
