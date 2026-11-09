@@ -1,6 +1,6 @@
 # ADR-0003: Motore di Fusione Multi-Modello (Ensemble LAM) e Nowcasting Terra/Mare
 
-- **Stato:** Proposto (`Proposed`)
+- **Stato:** Accettato (`Accepted`)
 - **Priorità:** P1 — Alta
 - **Data:** 2026-11-09
 - **Autori:** Daniele (`@Noobucodonosor`) & Antigravity AI
@@ -59,14 +59,14 @@ Il motore calcola automaticamente indicatori specialistici per Genova:
 
 ## 4. Task Operativi Collegati (con Definition of Done)
 
-- [ ] **TASK-ENG-01**: **Implementazione connettori multi-modello (AROME, ICON-D2, ECMWF, GFS), radar nowcasting (RainViewer/OMIRL) e algoritmo di fusione pesata con diagnostica Convergenza Ligure**
+- [x] **TASK-ENG-01**: **Implementazione connettori multi-modello (AROME, ICON-D2, ECMWF, GFS), radar nowcasting (RainViewer/OMIRL) e algoritmo di fusione pesata con diagnostica Convergenza Ligure**
   - *File coinvolti*: `backend/engine/connectors.py`, `backend/engine/ensemble.py`, `backend/engine/ligurian_diagnostics.py`, `tests/test_ensemble_nowcast.py`
   - *Acceptance Criteria*:
     - Il motore recupera e fonde correttamente i modelli LAM (AROME, ICON-D2) e globali (ECMWF, GFS).
     - Il calcolo trigonometrico della direzione del vento e il rilevatore di convergenza Tramontana/Scirocco funzionano e superano gli unit test.
     - L'endpoint `/api/v1/nowcast` fornisce timeline a 15 minuti per le prossime 3 ore + tiles radar live.
   - *Verification Step*: `pytest tests/test_ensemble_nowcast.py -v`
-- [ ] **TASK-MAR-01**: **Implementazione motore Meteo-Marino (Open-Meteo Marine + Meteomar + Stormglass opzionale) con calcolo Douglas, Beaufort, Wave Steepness e sicurezza navigazione**
+- [x] **TASK-MAR-01**: **Implementazione motore Meteo-Marino (Open-Meteo Marine + Meteomar + Stormglass opzionale) con calcolo Douglas, Beaufort, Wave Steepness e sicurezza navigazione**
   - *File coinvolti*: `backend/engine/marine.py`, `backend/engine/alerts.py`, `tests/test_marine_engine.py`
   - *Acceptance Criteria*:
     - Restituisce altezza onda significativa ($H_s$), onda massima stimata ($H_{max} \approx 1.65 \cdot H_s$), swell, periodo ($T_p$), direzione, SST, nodi di vento/raffica, grado Beaufort e grado Douglas.
