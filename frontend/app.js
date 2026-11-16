@@ -618,7 +618,7 @@ function renderMapOverlays() {
     cams.forEach((cam) => {
       const icon = L.divIcon({
         html: `<div style="
-          background: #7c3aed;
+          background: #0284c7;
           color: #fff;
           border: 1.5px solid #fff;
           border-radius: 999px;
@@ -1669,7 +1669,7 @@ function renderCharts(hourly48) {
         {
           label: "ECMWF 9km Pioggia (mm/h)",
           data: ecmwfRain,
-          backgroundColor: "rgba(168, 85, 247, 0.7)",
+          backgroundColor: "rgba(14, 165, 233, 0.7)",
           yAxisID: "yRain",
         },
       ],
@@ -1746,7 +1746,7 @@ function renderCharts(hourly48) {
         {
           label: "Onda Max Statistica Hmax (m)",
           data: waveHmaxSeries,
-          borderColor: "#a855f7",
+          borderColor: "#f59e0b",
           borderDash: [2, 2],
           yAxisID: "yWave",
           tension: 0.35,
