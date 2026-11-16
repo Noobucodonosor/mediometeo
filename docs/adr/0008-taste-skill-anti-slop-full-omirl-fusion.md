@@ -72,7 +72,7 @@ Dopo il rilascio dell'ingestione bulk OMIRL e della sala operativa in [`ADR-0007
     - Prefisso cache aggiornato a `pkg:v2.5:` in `backend/main.py`.
   - *Verification Step*: `.venv/bin/pytest tests/test_omirl_arpal.py -v`
 
-- [ ] **TASK-UX-03** (`#14`): **Refactoring Anti-Slop `taste-skill 2.5.1` (`design-taste-frontend`) su UI, Mappa e Sparkline 24h OMIRL**
+- [x] **TASK-UX-03** (`#14`): **Refactoring Anti-Slop `taste-skill 2.5.1` (`design-taste-frontend`) su UI, Mappa e Sparkline 24h OMIRL**
   - *File coinvolti*: `frontend/index.html`, `frontend/styles.css`, `frontend/app.js`, `frontend/sw.js`
   - *Acceptance Criteria*:
     - Zero emoji decorative in HTML, CSS e JS dinamico/Leaflet; uso esclusivo di SVG tecnici e badge geometrici/monospazio.
@@ -80,7 +80,7 @@ Dopo il rilascio dell'ingestione bulk OMIRL e della sala operativa in [`ADR-0007
     - `inspectOmirlStationChart` renderizza sparkline SVG inline (`viewBox="0 0 220 48"`) dentro `.omirl-sparkline-box`; SW aggiornato a `mediometeo-genova-v2.5`.
   - *Verification Step*: `node --check frontend/app.js && .venv/bin/pytest tests/test_api_e2e.py -v`
 
-- [ ] **TASK-WATCH-01** (`#15`): **Upgrade Smartwatch HUD (`/orologio`) con Palette `blue-black-cornflower`, Controlli Crociera Dinamici e Bussola SVG**
+- [x] **TASK-WATCH-01** (`#15`): **Upgrade Smartwatch HUD (`/orologio`) con Palette `blue-black-cornflower`, Controlli Crociera Dinamici e Bussola SVG**
   - *File coinvolti*: `frontend/orologio.html`, `tests/test_api_e2e.py`
   - *Acceptance Criteria*:
     - `frontend/orologio.html` utilizza `IBM Plex Sans`/`IBM Plex Mono`, palette `#0a0d14`/`#131824`/`#5ab9fc`, zero emoji decorative, mantenendo `"MEDIOMETEO HUD"` e `meta name="color-scheme"`.
