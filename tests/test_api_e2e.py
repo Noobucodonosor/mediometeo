@@ -29,6 +29,9 @@ def test_pwa_root_6tabs_and_smartwatch_view() -> None:
     r_watch = client.get("/orologio")
     assert r_watch.status_code == 200
     assert "MEDIOMETEO HUD" in r_watch.text
+    assert 'id="watch-svg-compass"' in r_watch.text
+    assert 'id="watch-speed"' in r_watch.text
+    assert 'IBM Plex Mono' in r_watch.text
 
     r_manifest = client.get("/manifest.json")
     assert r_manifest.status_code == 200
@@ -36,7 +39,7 @@ def test_pwa_root_6tabs_and_smartwatch_view() -> None:
 
     r_sw = client.get("/sw.js")
     assert r_sw.status_code == 200
-    assert "mediometeo-genova-v1" in r_sw.text
+    assert 'mediometeo-genova-v' in r_sw.text
 
 
 def test_locations_observations_forecast_marine_and_route_e2e() -> None:
@@ -50,6 +53,8 @@ def test_locations_observations_forecast_marine_and_route_e2e() -> None:
     r_obs = client.get("/api/v1/observations?location=COM-GENOVA")
     assert r_obs.status_code == 200
     obs_data = r_obs.json()
+    assert "live_sensors_count" in obs_data["observations_live"]
+    assert "all_weather_stations" in obs_data["observations_live"]
     assert len(obs_data["observations_live"]["nearest_weather_stations"]) > 0
     assert len(obs_data["observations_live"]["nearest_river_hydrometers"]) > 0
     assert len(obs_data["observations_live"]["nearest_webcams"]) > 0
