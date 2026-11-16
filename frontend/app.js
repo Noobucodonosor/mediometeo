@@ -1,20 +1,16 @@
 /* ==========================================================================
-   MedioMeteo Genova v2.2 — Client Application a 6 Schede Chiuse (ADR-0005, ADR-0006, ADR-0007)
-   Caratteristiche "Biglietto da Visita" (Flagship Edition):
+   MedioMeteo Genova v2.5 — Client Application a 6 Schede Chiuse (ADR-0005..0008)
+   Sistema visivo taste-skill 2.5.1: blue-black-cornflower + IBM Plex Sans/Mono + sharp radius.
    - Always-On Telemetry HUD Strip (5 parametri live sempre visibili anche sulla mappa).
-   - 6 Schede Chiuse mutuamente esclusive: all'avvio apre `3. MAPPA LIVE` Full-Canvas.
-   - Cliccando un Comune, Quartiere, Rada o punto libero sulla mappa -> seleziona la località e
-     passa automaticamente a `1. ADESSO (Sensori Reali OMIRL, Idrometri, Rosa dei Venti SVG & Webcam)`.
-   - Quadrante Nautico Vettoriale SVG in `1. ADESSO`: Rosa dei Venti Ligure + Vettore Vento +
-     Vettore Swell + Cono di Apertura Costiera (`bay_open_deg`) con risacca.
-   - 199 Sensori Reali OMIRL Regione Liguria (23 Anemometri con frecce direzionali, 75 Termometri,
-     77 Pluviometri, 24 Idrometri Fluviali Reali con barre graduate, Boa Capo Mele, Webcam).
-   - Modalità MARE a Fisica Costiera Pura (Zero semafori consiglio soggettivi).
+   - 6 Schede chiuse mutuamente esclusive: all'avvio apre `3. Mappa operativa live`.
+   - Click su Comune, Quartiere, Rada, Stazione OMIRL o punto libero -> apre `1. Adesso`.
+   - Quadrante nautico vettoriale SVG + fusione multi-sensore OMIRL + sparkline SVG 24h.
+   - Modalità Mare a fisica costiera pura (zero semafori consiglio soggettivi).
    ========================================================================== */
 
 const state = {
   mode: "land", // 'land' | 'sea'
-  activeTab: "tab-mappa", // Scheda predefinita all'avvio: 3. MAPPA LIVE
+  activeTab: "tab-mappa", // Scheda predefinita all'avvio: 3. Mappa operativa live
   selectedLocationId: "COM-GENOVA",
   customCoords: null, // { lat, lon }
   locations: [],
@@ -44,10 +40,35 @@ const state = {
 };
 
 const LEVEL_LABELS = {
-  green: "REGOLARE",
-  yellow: "ATTENZIONE / CAUTELA",
-  orange: "CRITICITÀ MODERATA-ALTA",
-  red: "ALLERTA / CRITICITÀ ELEVATA",
+  green: "Regolare",
+  yellow: "Attenzione / cautela",
+  orange: "Criticità moderata-alta",
+  red: "Allerta / criticità elevata",
+};
+
+const SVG_ICONS = {
+  radar: `<svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.5"/><path d="M8 8l4-4"/></svg>`,
+  wind: `<svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 6h8.5a2 2 0 1 0-2-2"/><path d="M2 10h10.5a2 2 0 1 1-2 2"/><path d="M2 8h6"/></svg>`,
+  camera: `<svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4.5" width="12" height="8.5" rx="1.5"/><circle cx="8" cy="8.75" r="2.2"/><path d="M5.5 4.5L6.5 3h3l1 1.5"/></svg>`,
+  anchor: `<svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="3.5" r="1.5"/><path d="M8 5v8.5M5 7.5h6M3.5 10.5a4.5 4.5 0 0 0 9 0"/></svg>`,
+  play: `<svg class="ui-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4.5 3.2L12.5 8l-8 4.8V3.2z"/></svg>`,
+  pause: `<svg class="ui-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="4" y="3.2" width="3" height="9.6"/><rect x="9" y="3.2" width="3" height="9.6"/></svg>`,
+  pin: `<svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="4.5"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/></svg>`,
+  compass: `<svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><polygon points="10.2,5.8 8.8,9.2 5.8,10.2 7.2,6.8" fill="currentColor" stroke="none"/></svg>`,
+  station: `<svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V6"/><circle cx="8" cy="5" r="1.5"/><path d="M4.8 7.8a4.5 4.5 0 0 1 0-5.6M11.2 2.2a4.5 4.5 0 0 1 0 5.6"/></svg>`,
+  wave: `<svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 6.5c1.5-1.5 3-1.5 4.5 0s3 1.5 4.5 0 3-1.5 4.5 0"/><path d="M1.5 10.5c1.5-1.5 3-1.5 4.5 0s3 1.5 4.5 0 3-1.5 4.5 0"/></svg>`,
+  rain: `<svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h8a2.5 2.5 0 0 0 .3-5A3.5 3.5 0 0 0 5.6 3.8 2.8 2.8 0 0 0 4 9.5z"/><path d="M5.5 11.8l-.8 2M8.5 11.8l-.8 2M11.5 11.8l-.8 2"/></svg>`,
+  thermometer: `<svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 9.2V3.5a1.5 1.5 0 0 0-3 0v5.7a2.8 2.8 0 1 0 3 0z"/></svg>`,
+  mountain: `<svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 13L6 4.5l3.5 5 2-2.5L14.5 13H1.5z"/></svg>`,
+  alert: `<svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.2L14 13H2L8 2.2z"/><path d="M8 6.5v3M8 11.3v.2"/></svg>`,
+  chart: `<svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12.5h12"/><polyline points="2.5,10 6,6.5 9,8.5 13.5,3.5"/></svg>`,
+  external: `<svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 2.5h4v4M13.5 2.5L7 9M6.5 4H3.5a1 1 0 0 0-1 1v7.5a1 1 0 0 0 1 1H11a1 1 0 0 0 1-1v-3"/></svg>`,
+  spark: `<svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v12M2 8h12M4.2 4.2l7.6 7.6M11.8 4.2l-7.6 7.6"/></svg>`,
+  layers: `<svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="8,2 14.5,5.5 8,9 1.5,5.5"/><path d="M1.5 8.5L8 12l6.5-3.5M1.5 11.2L8 14.5l6.5-3.3"/></svg>`,
+  clock: `<svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></svg>`,
+  calendar: `<svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="1.2"/><path d="M5 1.5v3M11 1.5v3M2 6.5h12"/></svg>`,
+  gauge: `<svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 2.5v11M3 5h2.5M3 8h3.5M3 11h2.5"/><path d="M7.5 11.5c1.2-1 2.4-1 3.6 0s2.4 1 3.4 0"/></svg>`,
+  road: `<svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 2L2.5 14M11 2l2.5 12M8 3.5v2M8 8v2M8 12.2v1.5"/></svg>`,
 };
 
 function setBadgeLevel(el, level, text) {
@@ -87,7 +108,7 @@ async function initApp() {
       .getRegistrations()
       .then((regs) => regs.forEach((r) => r.update().catch(() => {})))
       .catch(() => {});
-    navigator.serviceWorker.register("/sw.js?v=2.3").catch(() => {});
+    navigator.serviceWorker.register("/sw.js?v=2.5").catch(() => {});
   }
 }
 
@@ -100,11 +121,11 @@ function bindUIEvents() {
     });
   });
 
-  // Mode Switch TERRA / MARE
+  // Mode Switch Terra / Mare
   document.getElementById("btn-mode-land").addEventListener("click", () => switchMode("land"));
   document.getElementById("btn-mode-sea").addEventListener("click", () => switchMode("sea"));
 
-  // Filtri e Ricerca 118 Località
+  // Filtri e ricerca 118 località
   const typeFilter = document.getElementById("loc-type-filter");
   const searchInput = document.getElementById("loc-search-input");
   const selectLoc = document.getElementById("district-select");
@@ -134,7 +155,7 @@ function bindUIEvents() {
         window.switchTab("tab-adesso");
       },
       () => {
-        alert("Impossibile ottenere la posizione GPS. Usa la Mappa Live o il selettore Comuni.");
+        alert("Impossibile ottenere la posizione GPS. Usa la mappa live o il selettore comuni.");
       }
     );
   });
@@ -148,28 +169,28 @@ function bindUIEvents() {
   document.getElementById("btn-toggle-radar").addEventListener("click", (e) => {
     state.radarVisible = !state.radarVisible;
     e.currentTarget.classList.toggle("active", state.radarVisible);
-    e.currentTarget.textContent = `🌧️ Radar: ${state.radarVisible ? "ON" : "OFF"}`;
+    e.currentTarget.innerHTML = `${SVG_ICONS.radar} Radar: ${state.radarVisible ? "ON" : "OFF"}`;
     updateRadarLayer();
   });
 
   document.getElementById("btn-toggle-omirl").addEventListener("click", (e) => {
     state.omirlVisible = !state.omirlVisible;
     e.currentTarget.classList.toggle("active", state.omirlVisible);
-    e.currentTarget.textContent = `💨 Sensori OMIRL: ${state.omirlVisible ? "ON" : "OFF"}`;
+    e.currentTarget.innerHTML = `${SVG_ICONS.wind} Sensori OMIRL: ${state.omirlVisible ? "ON" : "OFF"}`;
     renderMapOverlays();
   });
 
   document.getElementById("btn-toggle-webcams").addEventListener("click", (e) => {
     state.webcamsVisible = !state.webcamsVisible;
     e.currentTarget.classList.toggle("active", state.webcamsVisible);
-    e.currentTarget.textContent = `📷 Webcam: ${state.webcamsVisible ? "ON" : "OFF"}`;
+    e.currentTarget.innerHTML = `${SVG_ICONS.camera} Webcam: ${state.webcamsVisible ? "ON" : "OFF"}`;
     renderMapOverlays();
   });
 
   document.getElementById("btn-toggle-amp").addEventListener("click", (e) => {
     state.ampVisible = !state.ampVisible;
     e.currentTarget.classList.toggle("active", state.ampVisible);
-    e.currentTarget.textContent = `⚓ Zone AMP: ${state.ampVisible ? "ON" : "OFF"}`;
+    e.currentTarget.innerHTML = `${SVG_ICONS.anchor} Zone AMP: ${state.ampVisible ? "ON" : "OFF"}`;
     renderMapOverlays();
   });
 
@@ -199,7 +220,7 @@ async function selectLocationById(locId, autoSwitchToAdesso = false) {
     const selectEl = document.getElementById("district-select");
     if (selectEl) selectEl.value = locId;
     if (state.map) {
-      state.map.flyTo([found.lat, found.lon], found.category === "sea" ? 12 : 12, {
+      state.map.flyTo([found.lat, found.lon], 12, {
         duration: 0.65,
       });
     }
@@ -272,28 +293,28 @@ function populateLocationSelect() {
   select.innerHTML = "";
 
   const groups = {
-    comune: { label: "🏛️ 67 COMUNI CITTÀ METROPOLITANA DI GENOVA", el: document.createElement("optgroup") },
-    quartiere: { label: "🏙️ 25 QUARTIERI / MUNICIPI DI GENOVA", el: document.createElement("optgroup") },
-    rada_porto: { label: "⚓ 20 RADE, PORTI, CALE & CAPI (GOLFO LIGURE)", el: document.createElement("optgroup") },
-    valico: { label: "⛰️ 6 VALICHI APPENNINICI & AUTOSTRADALI", el: document.createElement("optgroup") },
+    comune: { label: "67 Comuni — Città Metropolitana di Genova", el: document.createElement("optgroup") },
+    quartiere: { label: "25 Quartieri / Municipi di Genova", el: document.createElement("optgroup") },
+    rada_porto: { label: "20 Rade, porti, cale & capi (Golfo Ligure)", el: document.createElement("optgroup") },
+    valico: { label: "6 Valichi appenninici & autostradali", el: document.createElement("optgroup") },
   };
 
   Object.values(groups).forEach((g) => {
     g.el.label = g.label;
   });
 
+  const codeMap = {
+    comune: "CM",
+    quartiere: "QT",
+    rada_porto: "RD",
+    valico: "VL",
+  };
+
   filtered.forEach((loc) => {
     const opt = document.createElement("option");
     opt.value = loc.id;
-    const icon =
-      loc.loc_type === "rada_porto"
-        ? "⚓"
-        : loc.loc_type === "valico"
-        ? "⛰️"
-        : loc.loc_type === "quartiere"
-        ? "🏙️"
-        : "🏛️";
-    opt.textContent = `${icon} ${loc.name} (${loc.valley_or_sector})`;
+    const code = codeMap[loc.loc_type] || "GE";
+    opt.textContent = `[${code}] ${loc.name} (${loc.valley_or_sector})`;
     if (groups[loc.loc_type]) {
       groups[loc.loc_type].el.appendChild(opt);
     }
@@ -323,7 +344,7 @@ function populateRouteWaypoints() {
   state.coastalWaypoints.forEach((wp) => {
     const o1 = document.createElement("option");
     o1.value = wp.id;
-    o1.textContent = `⚓ ${wp.name}${wp.amp_zone ? " [" + wp.amp_zone + "]" : ""}`;
+    o1.textContent = `${wp.name}${wp.amp_zone ? " [" + wp.amp_zone + "]" : ""}`;
     const o2 = o1.cloneNode(true);
     selOrigin.appendChild(o1);
     selDest.appendChild(o2);
@@ -366,7 +387,7 @@ function initLeafletMap() {
   renderLocationsOnMap();
   state.map.on("zoomend", () => renderLocationsOnMap());
 
-  // Click libero sulla Mappa Live -> seleziona coordinata e passa automaticamente a 1. ADESSO (ADR-0006)
+  // Click libero sulla Mappa Live -> seleziona coordinata e passa automaticamente a 1. Adesso
   state.map.on("click", async (ev) => {
     const lat = Number(ev.latlng.lat.toFixed(4));
     const lon = Number(ev.latlng.lng.toFixed(4));
@@ -377,7 +398,7 @@ function initLeafletMap() {
     }
     state.customMarker = L.circleMarker([lat, lon], {
       radius: 9,
-      color: "#38bdf8",
+      color: "#5ab9fc",
       weight: 3,
       fillColor: "#f59e0b",
       fillOpacity: 0.92,
@@ -429,47 +450,47 @@ function renderLocationsOnMap() {
     }
 
     const isSelected = loc.id === state.selectedLocationId;
-    const colorMap = {
-      comune: "#10b981",
-      quartiere: "#34d399",
-      rada_porto: "#0ea5e9",
-      valico: "#f59e0b",
+    const styleMap = {
+      comune: { code: "CM", bg: "#10b981", fg: "#06130e" },
+      quartiere: { code: "QT", bg: "#34d399", fg: "#06130e" },
+      rada_porto: { code: "RD", bg: "#5ab9fc", fg: "#0a0d14" },
+      valico: { code: "VL", bg: "#f59e0b", fg: "#0a0d14" },
     };
-    const symbolMap = {
-      comune: "🏛️",
-      quartiere: "🏙️",
-      rada_porto: "⚓",
-      valico: "⛰️",
-    };
-    const bg = isSelected ? "#f59e0b" : colorMap[loc.loc_type] || "#10b981";
-    const sym = symbolMap[loc.loc_type] || "📍";
-    const size = isSelected ? 30 : loc.loc_type === "rada_porto" || loc.id === "COM-GENOVA" ? 25 : 21;
+    const meta = styleMap[loc.loc_type] || { code: "GE", bg: "#10b981", fg: "#06130e" };
+    const bg = isSelected ? "#f59e0b" : meta.bg;
+    const fg = isSelected ? "#0a0d14" : meta.fg;
+    const w = isSelected ? 28 : 24;
+    const h = isSelected ? 24 : 20;
 
     const icon = L.divIcon({
       html: `<div style="
         background: ${bg};
-        color: #fff;
-        border: ${isSelected ? "2.5px solid #fff" : "1.5px solid rgba(255,255,255,0.85)"};
-        border-radius: 999px;
-        width: ${size}px;
-        height: ${size}px;
+        color: ${fg};
+        border: ${isSelected ? "2px solid #e9edf3" : "1px solid rgba(10,13,20,0.75)"};
+        border-radius: 4px;
+        width: ${w}px;
+        height: ${h}px;
         display: grid;
         place-items: center;
-        font-size: ${size > 23 ? 13 : 10}px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.75);
-      ">${sym}</div>`,
+        font-family: 'IBM Plex Mono', monospace;
+        font-variant-numeric: tabular-nums;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.65);
+      ">${meta.code}</div>`,
       className: "",
-      iconSize: [size, size],
-      iconAnchor: [size / 2, size / 2],
+      iconSize: [w, h],
+      iconAnchor: [w / 2, h / 2],
     });
 
     const marker = L.marker([loc.lat, loc.lon], { icon }).addTo(state.locationsLayerGroup);
     const bayNote =
       loc.bay_open_deg !== null && loc.bay_open_deg !== undefined
-        ? `<br>📐 Cala aperta a <strong>${loc.bay_open_deg}°</strong>`
+        ? `<br>Cala aperta a <strong>${loc.bay_open_deg}°</strong>`
         : "";
     marker.bindTooltip(
-      `<strong>${loc.name}</strong> (${loc.loc_type.toUpperCase()})<br>${loc.valley_or_sector}${bayNote}<br><em>Clicca per aprire 1. 📡 ADESSO</em>`
+      `<strong>${loc.name}</strong> (${meta.code})<br>${loc.valley_or_sector}${bayNote}<br><em>Clicca per aprire 1. Adesso</em>`
     );
 
     marker.on("click", async (ev) => {
@@ -494,7 +515,7 @@ function renderMapOverlays() {
       }).addTo(state.ampLayerGroup);
       poly.bindTooltip(
         `<strong>${zone.name}</strong><br>Limite velocità: <strong>${
-          zone.max_speed_knots === 0 ? "DIVIETO ACCESSO" : zone.max_speed_knots + " kt"
+          zone.max_speed_knots === 0 ? "Divieto accesso" : zone.max_speed_knots + " kt"
         }</strong><br>${zone.rules}`
       );
     });
@@ -503,45 +524,81 @@ function renderMapOverlays() {
   if (!state.weatherPkg) return;
   const obs = state.weatherPkg.observations_live || {};
 
-  // 2. Stazioni Reali OMIRL (con Freccia Vettoriale Vento!) & Idrometri sulla Mappa
+  // 2. Stazioni reali OMIRL (anemometri con freccia SVG + termo/pluvio badge) & idrometri
   state.omirlLayerGroup.clearLayers();
   if (state.omirlVisible) {
     const stations = obs.all_weather_stations || obs.nearest_weather_stations || [];
     stations.forEach((st) => {
+      const hasWind = st.has_live_wind !== false && st.sensor !== "Termo/Pluvio";
       const windDeg = st.wind_dir_deg ?? 0;
-      // Il vento meteorologico indica DA dove soffia (es. 0° = da Nord verso Sud).
-      // Per ruotare la freccia '➤' (che punta a destra = 90° Est) nella direzione VERSO cui soffia il vento:
       const arrowRotate = (windDeg + 90) % 360;
       const isStrong = (st.wind_knots || 0) >= 16;
-      const borderCol = isStrong ? "#f59e0b" : "#38bdf8";
-      const textCol = isStrong ? "#fde68a" : "#7dd3fc";
 
-      const badgeHtml = `<div style="
-        background: rgba(5, 14, 28, 0.92);
-        color: ${textCol};
-        border: 1.5px solid ${borderCol};
-        border-radius: 999px;
-        padding: 1px 6px;
-        font-size: 10px;
-        font-weight: 800;
-        white-space: nowrap;
-        display: inline-flex;
-        align-items: center;
-        gap: 3px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.7);
-      "><span style="display:inline-block;transform:rotate(${arrowRotate}deg);font-size:10px;color:#38bdf8;">➤</span>${st.wind_knots ?? "--"}kt</div>`;
+      let badgeHtml = "";
+      let iconSize = [66, 22];
+      let iconAnchor = [33, 11];
+
+      if (hasWind) {
+        const borderCol = isStrong ? "#f59e0b" : "#5ab9fc";
+        const textCol = isStrong ? "#fbbf24" : "#e9edf3";
+        const arrowColor = isStrong ? "#f59e0b" : "#5ab9fc";
+        const arrowSvg = `<svg width="11" height="11" viewBox="0 0 12 12" style="display:inline-block;flex-shrink:0;transform:rotate(${arrowRotate}deg);" aria-hidden="true"><path d="M1.5 6h8M6.5 2.5L10.5 6l-4 3.5" fill="none" stroke="${arrowColor}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+        badgeHtml = `<div style="
+          background: rgba(10, 13, 20, 0.94);
+          color: ${textCol};
+          border: 1px solid ${borderCol};
+          border-radius: 4px;
+          padding: 2px 6px;
+          font-family: 'IBM Plex Mono', monospace;
+          font-variant-numeric: tabular-nums;
+          font-size: 11px;
+          font-weight: 600;
+          white-space: nowrap;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.7);
+        ">${arrowSvg}<span>${st.wind_knots ?? "--"} kt</span></div>`;
+      } else {
+        const hasRain = Number(st.precip_1h_mm || 0) > 0;
+        const borderCol = hasRain ? "#5ab9fc" : "rgba(233, 237, 243, 0.28)";
+        const tempPart = st.has_live_temp !== false && st.temp_c !== undefined ? `${st.temp_c}°` : "";
+        const rainPart = st.has_live_rain && st.precip_1h_mm !== undefined ? `${Number(st.precip_1h_mm).toFixed(1)}mm` : "";
+        const badgeText = [tempPart, rainPart].filter(Boolean).join(" ") || `${st.temp_c ?? "--"}°`;
+        iconSize = [68, 20];
+        iconAnchor = [34, 10];
+        badgeHtml = `<div style="
+          background: rgba(10, 13, 20, 0.92);
+          color: #e9edf3;
+          border: 1px solid ${borderCol};
+          border-radius: 4px;
+          padding: 1px 6px;
+          font-family: 'IBM Plex Mono', monospace;
+          font-variant-numeric: tabular-nums;
+          font-size: 11px;
+          font-weight: 500;
+          white-space: nowrap;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.65);
+        ">${badgeText}</div>`;
+      }
 
       const icon = L.divIcon({
         html: badgeHtml,
         className: "",
-        iconSize: [58, 20],
-        iconAnchor: [29, 10],
+        iconSize,
+        iconAnchor,
       });
       const m = L.marker([st.lat, st.lon], { icon }).addTo(state.omirlLayerGroup);
-      const srcLabel = st.is_live_rest ? "LIVE REST OMIRL" : "OMIRL / LAM";
+      const srcLabel = st.is_live_rest ? "Live REST OMIRL" : "OMIRL / LAM";
+      const windLine = hasWind
+        ? `Vento: <strong>${st.wind_knots} kt</strong> (${st.wind_kmh} km/h da ${windDeg}°) | Raff: ${st.gust_knots} kt<br>`
+        : `Sensore: <strong>${st.sensor || "Termo/Pluvio"}</strong><br>`;
       m.bindTooltip(
-        `<strong>📡 Centralina OMIRL: ${st.name} (${st.code})</strong> [${srcLabel}]<br>` +
-          `Vento: <strong>${st.wind_knots} kt</strong> (${st.wind_kmh} km/h) da ${windDeg}° | Max/Raff: ${st.gust_knots} kt<br>` +
+        `<strong>Centralina OMIRL: ${st.name} (${st.code})</strong> [${srcLabel}]<br>` +
+          windLine +
           `Temp: <strong>${st.temp_c}°C</strong> | Pioggia 1h: <strong>${st.precip_1h_mm} mm</strong> • Ore ${st.observed_at}`
       );
       m.on("click", async (ev) => {
@@ -561,85 +618,93 @@ function renderMapOverlays() {
           ? "#f97316"
           : "#10b981";
       const badgeHtml = `<div style="
-        background: rgba(5, 14, 28, 0.92);
+        background: rgba(10, 13, 20, 0.94);
         color: ${color};
-        border: 1.5px solid ${color};
-        border-radius: 6px;
-        padding: 1px 5px;
-        font-size: 10px;
-        font-weight: 800;
+        border: 1px solid ${color};
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-family: 'IBM Plex Mono', monospace;
+        font-variant-numeric: tabular-nums;
+        font-size: 11px;
+        font-weight: 600;
         white-space: nowrap;
         box-shadow: 0 2px 6px rgba(0,0,0,0.7);
-      ">🌊 ${hy.level_m}m</div>`;
+      ">IDRO ${hy.level_m}m</div>`;
       const icon = L.divIcon({
         html: badgeHtml,
         className: "",
-        iconSize: [54, 18],
-        iconAnchor: [27, 9],
+        iconSize: [76, 20],
+        iconAnchor: [38, 10],
       });
       const m = L.marker([hy.lat, hy.lon], { icon }).addTo(state.omirlLayerGroup);
       m.bindTooltip(
-        `<strong>🌊 Idrometro Reale OMIRL: ${hy.name} (${hy.river})</strong><br>` +
-          `Livello misurato: <strong>${hy.level_m} m</strong> (Soglia Gialla: ${hy.warn_threshold_m} m / Rossa: ${hy.alarm_threshold_m} m)<br>` +
+        `<strong>Idrometro reale OMIRL: ${hy.name} (${hy.river})</strong><br>` +
+          `Livello misurato: <strong>${hy.level_m} m</strong> (Soglia gialla: ${hy.warn_threshold_m} m / Rossa: ${hy.alarm_threshold_m} m)<br>` +
           `${hy.status_label} • Ore ${hy.observed_at}`
       );
     });
 
-    // Boa Ondametrica Capo Mele (se disponibile)
-    if (obs.marine_wave_buoy) {
-      const b = obs.marine_wave_buoy;
+    // Boa ondametrica Capo Mele (se disponibile)
+    const buoy = obs.marine_wave_buoy || obs.buoys_live?.[0];
+    if (buoy) {
+      const b = buoy;
+      const bLat = b.lat ?? 43.918;
+      const bLon = b.lon ?? 8.185;
+      const bInc = Number(b.increment_m ?? 0);
       const buoyIcon = L.divIcon({
         html: `<div style="
           background: #0284c7;
-          color: #fff;
-          border: 2px solid #fff;
-          border-radius: 999px;
+          color: #ffffff;
+          border: 1px solid #e9edf3;
+          border-radius: 4px;
           padding: 2px 7px;
-          font-size: 10px;
-          font-weight: 900;
+          font-family: 'IBM Plex Mono', monospace;
+          font-variant-numeric: tabular-nums;
+          font-size: 11px;
+          font-weight: 600;
           white-space: nowrap;
-          box-shadow: 0 3px 10px rgba(0,0,0,0.8);
-        ">🛟 Boa Hs ${b.wave_hs_m}m</div>`,
+          box-shadow: 0 3px 10px rgba(0,0,0,0.75);
+        ">BOA Hs ${b.wave_hs_m}m</div>`,
         className: "",
-        iconSize: [86, 22],
-        iconAnchor: [43, 11],
+        iconSize: [96, 22],
+        iconAnchor: [48, 11],
       });
-      const bm = L.marker([b.lat, b.lon], { icon: buoyIcon }).addTo(state.omirlLayerGroup);
+      const bm = L.marker([bLat, bLon], { icon: buoyIcon }).addTo(state.omirlLayerGroup);
       bm.bindTooltip(
-        `<strong>🛟 ${b.name} (${b.code})</strong><br>Altezza Onda Significativa misurata: <strong>${b.wave_hs_m} m</strong> (Δ ${b.increment_m >= 0 ? "+" : ""}${b.increment_m} m)<br>Aggiornamento: ${b.observed_at}`
+        `<strong>${b.name} (${b.code})</strong><br>Altezza onda significativa misurata: <strong>${b.wave_hs_m} m</strong> (Δ ${bInc >= 0 ? "+" : ""}${bInc} m)<br>Aggiornamento: ${b.observed_at}`
       );
     }
   }
 
-  // 3. Pin Webcam Live sulla Mappa
+  // 3. Pin webcam live sulla mappa (SVG camera glyph in #0284c7)
   state.webcamLayerGroup.clearLayers();
   if (state.webcamsVisible) {
     const cams = obs.all_webcams || obs.nearest_webcams || [];
+    const camMarkerSvg = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4.5" width="12" height="8.5" rx="1.5"/><circle cx="8" cy="8.75" r="2.2"/><path d="M5.5 4.5L6.5 3h3l1 1.5"/></svg>`;
     cams.forEach((cam) => {
       const icon = L.divIcon({
         html: `<div style="
           background: #0284c7;
-          color: #fff;
-          border: 1.5px solid #fff;
-          border-radius: 999px;
-          width: 22px;
-          height: 22px;
+          color: #ffffff;
+          border: 1px solid #e9edf3;
+          border-radius: 4px;
+          width: 24px;
+          height: 24px;
           display: grid;
           place-items: center;
-          font-size: 11px;
           box-shadow: 0 2px 6px rgba(0,0,0,0.75);
-        ">📷</div>`,
+        ">${camMarkerSvg}</div>`,
         className: "",
-        iconSize: [22, 22],
-        iconAnchor: [11, 11],
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
       });
       const m = L.marker([cam.lat, cam.lon], { icon }).addTo(state.webcamLayerGroup);
       const imgPreview = cam.live_image_url
-        ? `<img src="${cam.live_image_url}" alt="${cam.name}" style="width:200px;border-radius:6px;margin:4px 0;display:block;" />`
+        ? `<img src="${cam.live_image_url}" alt="${cam.name}" style="width:200px;border-radius:4px;margin:4px 0;display:block;" />`
         : "";
       m.bindPopup(
-        `<strong>📷 ${cam.name}</strong><br>${cam.view_direction}<br>${imgPreview}` +
-          `<a href="${cam.portal_url}" target="_blank" rel="noopener" style="color:#38bdf8;font-weight:700;">Apri Stream / Portale Live ↗</a>`
+        `<strong>${cam.name}</strong><br>${cam.view_direction}<br>${imgPreview}` +
+          `<a href="${cam.portal_url}" target="_blank" rel="noopener" style="color:#5ab9fc;font-weight:600;">Apri stream / portale live</a>`
       );
     });
   }
@@ -652,7 +717,7 @@ function toggleRadarAnimation() {
 
   state.radarPlaying = !state.radarPlaying;
   if (state.radarPlaying) {
-    btn.textContent = "⏸️ Pausa Radar";
+    btn.innerHTML = `${SVG_ICONS.pause} Pausa radar`;
     state.radarTimer = setInterval(() => {
       state.radarFrameIndex = (state.radarFrameIndex + 1) % frames.length;
       const slider = document.getElementById("radar-frame-slider");
@@ -660,7 +725,7 @@ function toggleRadarAnimation() {
       updateRadarLayer();
     }, 850);
   } else {
-    btn.textContent = "▶️ Play Radar";
+    btn.innerHTML = `${SVG_ICONS.play} Play radar`;
     if (state.radarTimer) {
       clearInterval(state.radarTimer);
       state.radarTimer = null;
@@ -705,7 +770,7 @@ function updateRadarLayer() {
     }).addTo(state.map);
     labelEl.textContent = activeFrame
       ? `Radar: ${activeFrame.time_label} (${activeFrame.is_nowcast ? "Nowcast +30m" : "Osservato"})`
-      : "Radar Live";
+      : "Radar live";
   } else {
     labelEl.textContent = "Radar: Nessun eco";
   }
@@ -778,7 +843,14 @@ function renderDashboard() {
   );
   const typeTag = document.getElementById("banner-type-tag");
   if (typeTag) {
-    typeTag.textContent = `${(loc.loc_type || "località").toUpperCase()} • ${loc.valley_or_sector || ""}`;
+    const typeLabelMap = {
+      comune: "Comune",
+      quartiere: "Quartiere",
+      rada_porto: "Rada / porto",
+      valico: "Valico",
+    };
+    const typeLabel = typeLabelMap[loc.loc_type] || "Località";
+    typeTag.textContent = loc.valley_or_sector ? `${typeLabel} • ${loc.valley_or_sector}` : typeLabel;
   }
   document.getElementById("banner-microclimate").textContent =
     loc.shelter_notes || d.microclimate_notes;
@@ -864,11 +936,11 @@ function renderDashboard() {
   document.getElementById("pressure-trend").textContent = cur.pressure_trend_label;
   document.getElementById(
     "wind-local-note"
-  ).innerHTML = `🧭 <strong>Rosa dei Venti Ligure (${wind.ligurian_name} - ${wind.cardinal}):</strong> ${wind.local_note}`;
+  ).innerHTML = `${SVG_ICONS.compass}<span><strong>Rosa dei venti ligure (${wind.ligurian_name} — ${wind.cardinal}):</strong> ${wind.local_note}</span>`;
 
   document.getElementById(
     "map-coords-label"
-  ).textContent = `📍 ${pkg.coordinates.lat.toFixed(4)}°N, ${pkg.coordinates.lon.toFixed(4)}°E`;
+  ).innerHTML = `${SVG_ICONS.pin} ${pkg.coordinates.lat.toFixed(4)}°N, ${pkg.coordinates.lon.toFixed(4)}°E`;
 
   renderDynamicKPIs(cur, landRisk, seaCond);
   renderNauticalCompassSVG(cur, seaCond, loc);
@@ -920,7 +992,7 @@ function renderNauticalCompassSVG(cur, seaCond, loc) {
   const bayAxis = loc.bay_open_deg ?? baySurge.bay_open_axis_deg ?? 195;
 
   if (badgeEl) {
-    badgeEl.textContent = `CALA APERTA A ${bayAxis}° • RISACCA ${baySurge.shore_breaker_height_m}m`;
+    badgeEl.textContent = `Cala aperta ${bayAxis}° • Risacca ${baySurge.shore_breaker_height_m}m`;
   }
 
   const cx = 130;
@@ -957,9 +1029,10 @@ function renderNauticalCompassSVG(cur, seaCond, loc) {
       return `
         <text x="${p.x.toFixed(1)}" y="${p.y.toFixed(1)}"
           text-anchor="middle" dominant-baseline="middle"
-          fill="${isMain ? "#f8fafc" : "#94a3b8"}"
-          font-size="${isMain ? "11" : "9"}"
-          font-weight="${isMain ? "800" : "600"}">
+          fill="${isMain ? "#e9edf3" : "#8891a1"}"
+          font-family="IBM Plex Mono, monospace"
+          font-size="${isMain ? "11" : "10"}"
+          font-weight="${isMain ? "600" : "500"}">
           ${c.lbl}
         </text>
       `;
@@ -973,34 +1046,34 @@ function renderNauticalCompassSVG(cur, seaCond, loc) {
           <path d="M0,0 L8,4 L0,8 Z" fill="#10b981" />
         </marker>
         <marker id="arrow-swell" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-          <path d="M0,0 L8,4 L0,8 Z" fill="#38bdf8" />
+          <path d="M0,0 L8,4 L0,8 Z" fill="#5ab9fc" />
         </marker>
       </defs>
 
       <!-- Cerchi Concentrici Strumentali -->
-      <circle cx="${cx}" cy="${cy}" r="${rOuter}" fill="rgba(4,12,24,0.85)" stroke="rgba(148,163,184,0.28)" stroke-width="1.5" />
-      <circle cx="${cx}" cy="${cy}" r="66" fill="none" stroke="rgba(148,163,184,0.14)" stroke-dasharray="3,3" />
-      <circle cx="${cx}" cy="${cy}" r="34" fill="none" stroke="rgba(148,163,184,0.14)" />
+      <circle cx="${cx}" cy="${cy}" r="${rOuter}" fill="#0a0d14" stroke="rgba(233,237,243,0.22)" stroke-width="1.5" />
+      <circle cx="${cx}" cy="${cy}" r="66" fill="none" stroke="rgba(233,237,243,0.12)" stroke-dasharray="3,3" />
+      <circle cx="${cx}" cy="${cy}" r="34" fill="none" stroke="rgba(233,237,243,0.12)" />
 
       <!-- Cono di Esposizione Costiera della Rada/Cala (bay_open_deg) -->
       <path d="${conePath}" fill="rgba(245, 158, 11, 0.16)" stroke="rgba(245, 158, 11, 0.55)" stroke-width="1.2" />
 
       <!-- Assi Cardinali -->
-      <line x1="${cx}" y1="${cy - rOuter}" x2="${cx}" y2="${cy + rOuter}" stroke="rgba(148,163,184,0.18)" />
-      <line x1="${cx - rOuter}" y1="${cy}" x2="${cx + rOuter}" y2="${cy}" stroke="rgba(148,163,184,0.18)" />
+      <line x1="${cx}" y1="${cy - rOuter}" x2="${cx}" y2="${cy + rOuter}" stroke="rgba(233,237,243,0.14)" />
+      <line x1="${cx - rOuter}" y1="${cy}" x2="${cx + rOuter}" y2="${cy}" stroke="rgba(233,237,243,0.14)" />
 
-      <!-- Vettore Swell / Onda (Azzurro) -->
+      <!-- Vettore Swell / Onda -->
       <line x1="${swellFrom.x.toFixed(1)}" y1="${swellFrom.y.toFixed(1)}"
             x2="${swellTo.x.toFixed(1)}" y2="${swellTo.y.toFixed(1)}"
-            stroke="#38bdf8" stroke-width="3.2" stroke-dasharray="5,3" marker-end="url(#arrow-swell)" />
+            stroke="#5ab9fc" stroke-width="3" stroke-dasharray="5,3" marker-end="url(#arrow-swell)" />
 
-      <!-- Vettore Vento Reale (Verde Smeraldo) -->
+      <!-- Vettore Vento Reale -->
       <line x1="${windFrom.x.toFixed(1)}" y1="${windFrom.y.toFixed(1)}"
             x2="${windTo.x.toFixed(1)}" y2="${windTo.y.toFixed(1)}"
-            stroke="#10b981" stroke-width="3.8" marker-end="url(#arrow-wind)" />
+            stroke="#10b981" stroke-width="3.5" marker-end="url(#arrow-wind)" />
 
       <!-- Punto Centrale Località -->
-      <circle cx="${cx}" cy="${cy}" r="6" fill="#f59e0b" stroke="#fff" stroke-width="1.5" />
+      <circle cx="${cx}" cy="${cy}" r="5.5" fill="#f59e0b" stroke="#e9edf3" stroke-width="1.5" />
 
       <!-- Etichette Rosa dei Venti -->
       ${labelsSvg}
@@ -1009,9 +1082,18 @@ function renderNauticalCompassSVG(cur, seaCond, loc) {
 
   if (legendEl) {
     legendEl.innerHTML = `
-      <span style="color:#10b981;font-weight:700;">━━➤ Vento ${wind.ligurian_name} (${wind.speed_knots} kt da ${wind.direction_deg}°)</span> &nbsp;•&nbsp;
-      <span style="color:#38bdf8;font-weight:700;">┅┅➤ Swell (${waves.swell_height_m}m @ ${waves.swell_period_s}s da ${swellDeg}°)</span> &nbsp;•&nbsp;
-      <span style="color:#fbbf24;font-weight:700;">◪ Cono Cala (${bayAxis}°)</span>
+      <span style="color:#10b981;font-weight:600;display:inline-flex;align-items:center;gap:4px;">
+        <span style="display:inline-block;width:14px;height:2px;background:#10b981;"></span>
+        Vento ${wind.ligurian_name} (${wind.speed_knots} kt da ${wind.direction_deg}°)
+      </span>
+      <span style="color:#5ab9fc;font-weight:600;display:inline-flex;align-items:center;gap:4px;">
+        <span style="display:inline-block;width:14px;border-top:2px dashed #5ab9fc;"></span>
+        Swell (${waves.swell_height_m}m @ ${waves.swell_period_s}s da ${swellDeg}°)
+      </span>
+      <span style="color:#fbbf24;font-weight:600;display:inline-flex;align-items:center;gap:4px;">
+        <span style="display:inline-block;width:10px;height:10px;background:rgba(245,158,11,0.35);border:1px solid #fbbf24;border-radius:2px;"></span>
+        Cono cala (${bayAxis}°)
+      </span>
     `;
   }
 }
@@ -1028,64 +1110,64 @@ function renderDynamicKPIs(cur, landRisk, seaCond) {
     state.mode === "sea"
       ? [
           {
-            label: "Vento & Raffica (kt | m/s | km/h)",
+            label: "Vento & raffica (kt | m/s | km/h)",
             value: `${wind.speed_knots} / ${wind.gust_knots} kt`,
             sub: `${wind.speed_ms}/${wind.gust_ms} m/s • F${wind.beaufort.force} ${wind.beaufort.label}`,
           },
           {
-            label: "Spettro Onda Hs / Hmax / H1000",
+            label: "Spettro onda Hs / Hmax / H1000",
             value: `${waves.significant_height_m} / ${waves.max_height_m} m`,
             sub: `Picco 1/1000: ${waves.extreme_height_1_1000_m}m • ${waves.douglas.label}`,
           },
           {
-            label: "Periodo Tp, Lunghezza L & Ripidità",
+            label: "Periodo Tp, lunghezza L & ripidità",
             value: `${waves.peak_period_s} s (L=${waves.wavelength_m}m)`,
             sub: `Ripidità H/L: ${waves.steepness_pct}% da ${waves.direction_cardinal}`,
           },
           {
-            label: "Onda Vento vs Swell Lungo",
+            label: "Onda vento vs swell lungo",
             value: `${waves.wind_wave_height_m}m / ${waves.swell_height_m}m`,
             sub: `Vento ${waves.wind_wave_cardinal} (${waves.wind_wave_period_s}s) • Swell ${waves.swell_cardinal} (${waves.swell_period_s}s)`,
           },
           {
-            label: "Risacca in Rada & Marea",
+            label: "Risacca in rada & marea",
             value: `Frangente ${coastal.bay_surge.shore_breaker_height_m} m`,
             sub: `Marea ${coastal.tides.current_height_cm} cm (${coastal.tides.current_phase})`,
           },
           {
-            label: "Corrente, SST & Visibilità",
+            label: "Corrente, SST & visibilità",
             value: `${coastal.surface_current.speed_knots} kt (${coastal.surface_current.direction_cardinal})`,
             sub: `Acqua ${waves.sea_surface_temp_c}°C • Visibilità ${coastal.visibility_nm} NM`,
           },
         ]
       : [
           {
-            label: "Intensità Pioggia (1h / Picco LAM)",
+            label: "Intensità pioggia (1h / picco LAM)",
             value: `${hydro.precip_1h_mm} mm/h`,
             sub: `Max AROME/ICON-D2: ${cur.precip_max_lam_mm} mm/h`,
           },
           {
-            label: "Cumulata Pluviometrica 3h / 24h",
+            label: "Cumulata pluviometrica 3h / 24h",
             value: `${hydro.precip_3h_mm} / ${hydro.precip_24h_mm} mm`,
             sub: hydro.label.split("—")[0],
           },
           {
-            label: "Vento & Raffica (km/h | kt)",
+            label: "Vento & raffica (km/h | kt)",
             value: `${cur.wind_kmh} / ${cur.gust_kmh} km/h`,
             sub: `${wind.speed_knots} / ${wind.gust_knots} kt da ${cur.wind_cardinal} (${cur.wind_dir_deg}°)`,
           },
           {
-            label: "Dew Point, Percepita & Maccaja",
+            label: "Dew point, percepita & maccaja",
             value: `DP ${thermo.dew_point_c ?? "--"}°C (Perc. ${thermo.perceived_temp_c ?? cur.temp_c}°C)`,
             sub: thermo.maccaja_status || `Umidità ${cur.humidity_pct}%`,
           },
           {
-            label: "Zero Termico, UV & Radiazione",
+            label: "Zero termico, UV & radiazione",
             value: `ZT ${landRisk.appennino_passes.freezing_level_m} m`,
             sub: `UV ${thermo.uv_index ?? cur.uv_index} • Rad. ${thermo.solar_radiation_wm2 ?? cur.solar_radiation_wm2} W/m²`,
           },
           {
-            label: "Fisica Mare Antistante",
+            label: "Fisica mare antistante",
             value: `Hs ${waves.significant_height_m}m (Hmax ${waves.max_height_m}m)`,
             sub: `Tp ${waves.peak_period_s}s da ${waves.direction_cardinal} • ${waves.douglas.label}`,
           },
@@ -1106,22 +1188,84 @@ function renderDynamicKPIs(cur, landRisk, seaCond) {
 
 window.inspectOmirlStationChart = async function inspectOmirlStationChart(code, sensor, btnEl) {
   if (!code) return;
-  const originalText = btnEl.textContent;
-  btnEl.textContent = "⏳ Caricamento serie OMIRL...";
+  const originalHtml = btnEl.innerHTML;
+  btnEl.textContent = "Caricamento serie OMIRL...";
   try {
     const res = await fetch(`/api/v1/omirl-chart?code=${encodeURIComponent(code)}&sensor=${encodeURIComponent(sensor)}`);
-    const data = await res.json();
-    if (data.available && data.recent_24_points?.length) {
-      const pts = data.recent_24_points.slice(-8);
-      const summary = pts.map((p) => `${p.timestamp.split(" ")[1] || p.timestamp}: ${p.value}`).join(" → ");
-      btnEl.outerHTML = `<div style="margin-top:0.3rem;padding:0.35rem 0.5rem;background:rgba(56,189,248,0.1);border-radius:6px;font-size:0.71rem;color:#bae6fd;">
-        📈 <strong>Ultime letture ${sensor} (${data.unit || ""}) [Min ${data.min_value} / Max ${data.max_value}]:</strong><br>${summary}
-      </div>`;
-    } else {
-      btnEl.textContent = "Serie storica 24h non esposta per questo sensore";
+    if (!res.ok) {
+      btnEl.textContent = "Serie storica 24h non disponibile";
+      return;
     }
+    const data = await res.json();
+
+    const rawPoints =
+      Array.isArray(data.recent_24_points) && data.recent_24_points.length
+        ? data.recent_24_points
+        : Array.isArray(data.series?.[0]?.points)
+        ? data.series[0].points.slice(-24)
+        : [];
+
+    const points = rawPoints
+      .map((p) => ({
+        label: String(p.timestamp ?? p.time_label ?? "").split(" ").pop() || "",
+        value: Number(p.value),
+      }))
+      .filter((p) => Number.isFinite(p.value));
+
+    if ((data.available === false && !points.length) || !points.length) {
+      btnEl.textContent = "Serie storica 24h non esposta per questo sensore";
+      return;
+    }
+
+    const vals = points.map((p) => p.value);
+    const minVal = data.min_value ?? Math.min(...vals);
+    const maxVal = data.max_value ?? Math.max(...vals);
+    const latestPt = points[points.length - 1];
+    const unitMap = { Vento: "km/h", Termo: "°C", Pluvio: "mm", Idro: "m" };
+    const unit = data.unit ?? unitMap[sensor] ?? "";
+
+    const w = 220;
+    const h = 48;
+    const padX = 4;
+    const padY = 6;
+    const span = maxVal - minVal;
+    const coords = points.map((p, idx) => {
+      const x = points.length === 1 ? w / 2 : padX + (idx / (points.length - 1)) * (w - padX * 2);
+      const normY = span > 0 ? (p.value - minVal) / span : 0.5;
+      const y = h - padY - normY * (h - padY * 2);
+      return { x: Number(x.toFixed(1)), y: Number(y.toFixed(1)) };
+    });
+
+    const polylinePoints =
+      coords.length === 1
+        ? `4,${coords[0].y} 216,${coords[0].y}`
+        : coords.map((c) => `${c.x},${c.y}`).join(" ");
+    const firstX = coords.length === 1 ? 4 : coords[0].x;
+    const lastCoord = coords[coords.length - 1];
+    const lastX = coords.length === 1 ? 216 : lastCoord.x;
+    const areaPoints = `${firstX},${h - 2} ${polylinePoints} ${lastX},${h - 2}`;
+
+    btnEl.outerHTML = `
+      <div class="omirl-sparkline-box" role="region" aria-label="Serie storica 24h ${sensor} ${code}">
+        <div class="omirl-sparkline-head">
+          <span>${sensor} (${code})</span>
+          <strong>${latestPt.value}${unit ? " " + unit : ""}</strong>
+        </div>
+        <svg class="omirl-sparkline-svg" viewBox="0 0 220 48" preserveAspectRatio="none" role="img" aria-label="Andamento ultime 24 letture ${sensor}">
+          <line x1="0" y1="24" x2="220" y2="24" stroke="rgba(233,237,243,0.12)" stroke-dasharray="2,3" stroke-width="1" />
+          <polygon points="${areaPoints}" fill="rgba(90,185,252,0.14)" />
+          <polyline points="${polylinePoints}" fill="none" stroke="#5ab9fc" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+          <circle cx="${lastCoord.x}" cy="${lastCoord.y}" r="2.6" fill="#5ab9fc" stroke="#0a0d14" stroke-width="1" />
+        </svg>
+        <div class="omirl-sparkline-meta">
+          <span>Min ${minVal}${unit ? " " + unit : ""}</span>
+          <span>Max ${maxVal}${unit ? " " + unit : ""}</span>
+          <span>Ore ${latestPt.label || "--:--"}</span>
+        </div>
+      </div>
+    `;
   } catch (e) {
-    btnEl.textContent = originalText;
+    btnEl.innerHTML = originalHtml;
   }
 };
 
@@ -1134,28 +1278,33 @@ function renderOmirlObservationsAndWebcams(obs, cur, seaCond) {
   stGrid.innerHTML = stations
     .map((st) => {
       const liveBadge = st.is_live_rest
-        ? `<span class="badge-pill level-green" style="font-size:0.62rem;padding:0.08rem 0.4rem;">LIVE REST OMIRL</span>`
-        : `<span class="badge-pill level-physics" style="font-size:0.62rem;padding:0.08rem 0.4rem;">SINOTTICA</span>`;
-      const defaultSensor = st.has_live_wind ? "Vento" : st.has_live_temp ? "Termo" : "Pluvio";
+        ? `<span class="badge-pill level-green">Live REST OMIRL</span>`
+        : `<span class="badge-pill level-physics">Sinottica</span>`;
+      const hasWind = st.has_live_wind !== false && st.sensor !== "Termo/Pluvio";
+      const defaultSensor = hasWind ? "Vento" : st.has_live_temp !== false ? "Termo" : "Pluvio";
+      const windPart = hasWind
+        ? `<span>${SVG_ICONS.wind} <strong>${st.wind_knots} kt</strong> (${st.wind_kmh} km/h da ${st.wind_dir_deg ?? 0}°) • Max <strong>${st.gust_knots} kt</strong></span>`
+        : `<span style="color:var(--p-muted);">${SVG_ICONS.wind} Rif. zona ${st.wind_knots} kt</span>`;
+
       return `
         <div class="station-card">
           <div class="station-header">
-            <div class="station-name">📡 ${st.name} <span style="color:var(--text-muted);font-size:0.72rem;">(${st.code})</span></div>
-            <div style="display:flex;gap:0.35rem;align-items:center;">
+            <div class="station-name">${st.name} <span class="station-code">(${st.code})</span></div>
+            <div style="display:flex;gap:0.35rem;align-items:center;flex-wrap:wrap;">
               ${liveBadge}
-              <span class="station-dist">📍 ${st.distance_km} km</span>
+              <span class="station-dist">${st.distance_km} km</span>
             </div>
           </div>
-          <div style="font-size:0.73rem;color:var(--text-muted);">${st.muni} • Quota ${st.elev_m} m • Rilevato ore ${st.observed_at}</div>
-          <div style="display:flex;justify-content:space-between;margin-top:0.2rem;font-size:0.83rem;flex-wrap:wrap;gap:0.4rem;">
-            <span>🌡️ <strong>${st.temp_c}°C</strong></span>
-            <span>🌧️ <strong>${st.precip_1h_mm} mm</strong></span>
-            <span>💨 <strong>${st.wind_knots} kt</strong> (${st.wind_kmh} km/h da ${st.wind_dir_deg ?? 0}°) • Max <strong>${st.gust_knots} kt</strong></span>
+          <div class="station-meta-line">${st.muni} • Quota ${st.elev_m} m • Rilevato ore ${st.observed_at}</div>
+          <div class="station-metrics-row">
+            <span>${SVG_ICONS.thermometer} <strong>${st.temp_c}°C</strong></span>
+            <span>${SVG_ICONS.rain} <strong>${st.precip_1h_mm} mm</strong></span>
+            ${windPart}
           </div>
           <div>
-            <button type="button" class="btn-action" style="font-size:0.69rem;padding:0.18rem 0.5rem;margin-top:0.2rem;"
+            <button type="button" class="btn-action" style="margin-top:0.2rem;"
               onclick="window.inspectOmirlStationChart('${st.code}', '${defaultSensor}', this)">
-              📈 Ispetta Curva 24h OMIRL (${defaultSensor})
+              ${SVG_ICONS.chart} Curva 24h OMIRL (${defaultSensor})
             </button>
           </div>
         </div>
@@ -1183,24 +1332,24 @@ function renderOmirlObservationsAndWebcams(obs, cur, seaCond) {
       return `
         <div class="station-card">
           <div class="station-header">
-            <div class="station-name">🌊 ${hy.name} <span style="color:var(--text-muted);font-size:0.72rem;">(${hy.code})</span></div>
-            <span class="station-dist">📍 ${hy.distance_km} km</span>
+            <div class="station-name">${hy.name} <span class="station-code">(${hy.code})</span></div>
+            <span class="station-dist">${hy.distance_km} km</span>
           </div>
-          <div style="font-size:0.73rem;color:var(--text-muted);">Bacino: <strong>${hy.river}</strong> (${hy.municipality || "GE"}) • Ore ${hy.observed_at}</div>
+          <div class="station-meta-line">Bacino: <strong>${hy.river}</strong> (${hy.municipality || hy.muni || "GE"}) • Ore ${hy.observed_at}</div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.15rem;">
-            <span style="font-size:1.1rem;font-weight:900;color:#fff;">Livello: ${hy.level_m} m</span>
-            <span class="badge-pill ${pillClass}">${hy.status_level === "green" ? "REGOLARE" : "GUARDIA IDRO"}</span>
+            <span class="hydro-level-val">Livello: ${hy.level_m} m</span>
+            <span class="badge-pill ${pillClass}">${hy.status_level === "green" ? "Regolare" : "Guardia idro"}</span>
           </div>
           <!-- Barra Graduata Idrometrica con Tacche Soglia Gialla e Rossa -->
           <div class="hydro-gauge-track" title="Livello ${hy.level_m}m su scala ${maxScale.toFixed(1)}m">
             <div class="hydro-gauge-fill" style="width:${fillPct}%;background:${barColor};"></div>
-            <div class="hydro-threshold-mark" style="left:${warnPct}%;background:#fbbf24;" title="Soglia Gialla: ${hy.warn_threshold_m}m"></div>
-            <div class="hydro-threshold-mark" style="left:${alarmPct}%;background:#ef4444;" title="Soglia Rossa: ${hy.alarm_threshold_m}m"></div>
+            <div class="hydro-threshold-mark" style="left:${warnPct}%;background:#fbbf24;" title="Soglia gialla: ${hy.warn_threshold_m}m"></div>
+            <div class="hydro-threshold-mark" style="left:${alarmPct}%;background:#ef4444;" title="Soglia rossa: ${hy.alarm_threshold_m}m"></div>
           </div>
-          <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-muted);">
+          <div class="hydro-thresholds-row">
             <span>0.0 m</span>
-            <span style="color:#fbbf24;">⚠️ Gialla ${hy.warn_threshold_m} m</span>
-            <span style="color:#f87171;">🚨 Rossa ${hy.alarm_threshold_m} m</span>
+            <span style="color:#fbbf24;">Gialla ${hy.warn_threshold_m} m</span>
+            <span style="color:#f87171;">Rossa ${hy.alarm_threshold_m} m</span>
           </div>
         </div>
       `;
@@ -1217,42 +1366,42 @@ function renderOmirlObservationsAndWebcams(obs, cur, seaCond) {
   camGrid.innerHTML = cams
     .map((cam) => {
       const previewStyle = cam.live_image_url
-        ? `background: linear-gradient(180deg, rgba(4,12,24,0.15) 0%, rgba(4,12,24,0.88) 100%), url('${cam.live_image_url}') center/cover no-repeat;`
-        : `background: linear-gradient(180deg, #0b2444 0%, #071932 58%, #041022 100%);`;
+        ? `background: linear-gradient(180deg, rgba(10,13,20,0.18) 0%, rgba(10,13,20,0.88) 100%), url('${cam.live_image_url}') center/cover no-repeat;`
+        : `background: linear-gradient(180deg, #0d1b2e 0%, #0a1424 58%, #0a0d14 100%);`;
       const svgBackdrop = cam.live_image_url
         ? ""
         : `<svg viewBox="0 0 320 175" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;opacity:0.45;pointer-events:none;">
             <path d="M0,${115 - waveAmp} Q80,${115 + waveAmp} 160,${115 - waveAmp} T320,${115 - waveAmp} L320,175 L0,175 Z" fill="#0284c7" />
             <path d="M0,${132 + waveAmp / 2} Q80,${132 - waveAmp} 160,${132 + waveAmp / 2} T320,${132 + waveAmp / 2} L320,175 L0,175 Z" fill="#0369a1" />
-            <circle cx="265" cy="40" r="14" fill="rgba(56,189,248,0.28)" />
+            <circle cx="265" cy="40" r="14" fill="rgba(90,185,252,0.28)" />
           </svg>`;
       return `
         <div class="webcam-card">
           <div class="webcam-preview" style="${previewStyle}">
             ${svgBackdrop}
-            <div style="display:flex;justify-content:space-between;align-items:center;z-index:2;">
+            <div style="display:flex;justify-content:space-between;align-items:center;z-index:2;gap:0.4rem;">
               <span class="badge-pill ${cam.live_image_url ? "level-green" : "level-physics"}">
-                ${cam.live_image_url ? "📷 IMMAGINE LIVE OMIRL" : "📷 TELEMETRIA VISIVA & STREAM"}
+                ${SVG_ICONS.camera} ${cam.live_image_url ? "Immagine live OMIRL" : "Telemetria & stream"}
               </span>
-              <span style="font-size:0.74rem;font-weight:800;color:#38bdf8;background:rgba(4,12,24,0.75);padding:0.1rem 0.45rem;border-radius:999px;">
-                📍 a ${cam.distance_km} km
+              <span class="webcam-dist-tag">
+                a ${cam.distance_km} km
               </span>
             </div>
             <div style="z-index:2;">
-              <div style="font-size:0.92rem;font-weight:800;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,0.9);">${cam.name}</div>
-              <div style="font-size:0.74rem;color:#cbd5e1;margin-top:0.1rem;">🔭 ${cam.view_direction}</div>
-              <div style="font-size:0.7rem;color:#7dd3fc;margin-top:0.15rem;">
-                Condizione inquadrata: ${cur?.temp_c?.toFixed(1) ?? "--"}°C • Vento ${windKt} kt • Onda Hs ${hs}m
+              <div style="font-size:0.95rem;font-weight:600;color:#e9edf3;text-shadow:0 1px 4px rgba(0,0,0,0.9);">${cam.name}</div>
+              <div style="font-size:0.8125rem;color:#e9edf3;margin-top:0.15rem;">Direzione: ${cam.view_direction}</div>
+              <div style="font-size:0.8125rem;color:#5ab9fc;margin-top:0.15rem;font-variant-numeric:tabular-nums;">
+                Condizioni: ${cur?.temp_c?.toFixed(1) ?? "--"}°C • Vento ${windKt} kt • Onda Hs ${hs}m
               </div>
             </div>
           </div>
           <div class="webcam-body">
-            <div style="display:flex;justify-content:space-between;color:var(--text-muted);font-size:0.72rem;">
+            <div style="display:flex;justify-content:space-between;color:var(--p-muted);font-size:0.8125rem;">
               <span>Fonte: ${cam.provider}</span>
               <span>${cam.timestamp_label}</span>
             </div>
             <a href="${cam.live_image_url || cam.portal_url}" target="_blank" rel="noopener" class="btn-action" style="justify-content:center;margin-top:0.2rem;">
-              👁️ Apri ${cam.live_image_url ? "Foto Reale HD / Portale" : "Stream Live Ufficiale"} ↗
+              ${SVG_ICONS.external} Apri ${cam.live_image_url ? "foto reale HD / portale" : "stream live ufficiale"}
             </a>
           </div>
         </div>
@@ -1280,11 +1429,11 @@ function renderNowcast15mStrip(timeline) {
           <div class="nowcast-time">${timeLabel}</div>
           <div class="nowcast-temp">${step.temp_c.toFixed(1)}°C</div>
           <div class="nowcast-meta" style="color: ${
-            step.rain_rate_mm_h > 0.2 ? "#38bdf8" : "var(--text-muted)"
-          }; font-weight: 600;">
-            🌧️ ${step.rain_rate_mm_h.toFixed(1)} mm/h
+            step.rain_rate_mm_h > 0.2 ? "var(--p-accent)" : "var(--p-muted)"
+          }; font-weight: 500;">
+            ${SVG_ICONS.rain} ${step.rain_rate_mm_h.toFixed(1)} mm/h
           </div>
-          <div class="nowcast-meta">💨 ${windStr}</div>
+          <div class="nowcast-meta">${SVG_ICONS.wind} ${windStr}</div>
         </div>
       `;
     })
@@ -1298,7 +1447,7 @@ function renderLandAndSeaPanels(landRisk, seaCond, conv) {
     LEVEL_LABELS[landRisk.overall_level]
   );
 
-  // Pannello TERRA: Fisica + Indicatori Operativi
+  // Pannello Terra: Fisica + Indicatori Operativi
   const landContainer = document.getElementById("land-risk-items");
   const thermo = landRisk.thermo_comfort || {};
   const convBorder =
@@ -1311,7 +1460,7 @@ function renderLandAndSeaPanels(landRisk, seaCond, conv) {
   landContainer.innerHTML = `
     <div class="risk-item border-${landRisk.hydrogeological.level}">
       <div class="risk-item-title">
-        <span>🌊 Bacini Idrografici & Sottopassi (Bisagno, Polcevera, Entella, Stura)</span>
+        <span class="risk-item-title-label">${SVG_ICONS.gauge} Bacini idrografici &amp; sottopassi (Bisagno, Polcevera, Entella, Stura)</span>
         <span>${landRisk.hydrogeological.precip_1h_mm} mm/h</span>
       </div>
       <div class="risk-item-desc"><strong>${landRisk.hydrogeological.label}:</strong> ${landRisk.hydrogeological.advice}</div>
@@ -1319,7 +1468,7 @@ function renderLandAndSeaPanels(landRisk, seaCond, conv) {
 
     <div class="risk-item border-${convBorder}">
       <div class="risk-item-title">
-        <span>⚡ Linea di Convergenza Ligure (Tramontana Scura vs Scirocco)</span>
+        <span class="risk-item-title-label">${SVG_ICONS.spark} Linea di convergenza ligure (Tramontana scura vs Scirocco)</span>
         <span>Score ${conv.convergence_score}/100</span>
       </div>
       <div class="risk-item-desc"><strong>${conv.status}:</strong> ${conv.explanation}</div>
@@ -1327,7 +1476,7 @@ function renderLandAndSeaPanels(landRisk, seaCond, conv) {
 
     <div class="risk-item border-${landRisk.wind_viability.level}">
       <div class="risk-item-title">
-        <span>🛵 Viabilità Urbana, Sopraelevata Aldo Moro & Viadotti A7/A10/A12/A26</span>
+        <span class="risk-item-title-label">${SVG_ICONS.road} Viabilità urbana, Sopraelevata Aldo Moro &amp; viadotti A7/A10/A12/A26</span>
         <span>Raffica ${landRisk.wind_viability.gust_kmh} km/h</span>
       </div>
       <div class="risk-item-desc"><strong>${landRisk.wind_viability.label}:</strong> ${landRisk.wind_viability.advice}</div>
@@ -1335,7 +1484,7 @@ function renderLandAndSeaPanels(landRisk, seaCond, conv) {
 
     <div class="risk-item border-${landRisk.appennino_passes.level}">
       <div class="risk-item-title">
-        <span>🏔️ Valichi Appenninici (Giovi, Turchino, Scoffera, Bocco, Faiallo)</span>
+        <span class="risk-item-title-label">${SVG_ICONS.mountain} Valichi appenninici (Giovi, Turchino, Scoffera, Bocco, Faiallo)</span>
         <span>ZT ~${landRisk.appennino_passes.freezing_level_m} m</span>
       </div>
       <div class="risk-item-desc"><strong>${landRisk.appennino_passes.label}:</strong> ${landRisk.appennino_passes.advice}</div>
@@ -1343,19 +1492,19 @@ function renderLandAndSeaPanels(landRisk, seaCond, conv) {
 
     <div class="risk-item border-physics">
       <div class="risk-item-title">
-        <span>🌡️ Termo-Igrometria, Punto di Rugiada & Diagnostica Maccaja Ligure</span>
+        <span class="risk-item-title-label">${SVG_ICONS.thermometer} Termo-igrometria, punto di rugiada &amp; diagnostica maccaja ligure</span>
         <span>DP ${thermo.dew_point_c ?? "--"}°C | UV ${thermo.uv_index ?? "--"}</span>
       </div>
       <div class="risk-item-desc">
         Percepita: <strong>${thermo.perceived_temp_c ?? "--"}°C</strong> (${thermo.comfort_label || "Regolare"}) •
         Humidex: ${thermo.humidex ?? "--"} • Windchill: ${thermo.windchill_c ?? "--"}°C •
-        Radiazione Solare: ${thermo.solar_radiation_wm2 ?? "--"} W/m² •
+        Radiazione solare: ${thermo.solar_radiation_wm2 ?? "--"} W/m² •
         <strong>${thermo.maccaja_status || ""}</strong>
       </div>
     </div>
   `;
 
-  // Pannello MARE: SOLO Fisica Costiera & Oceanografica Pura (ZERO semafori soggettivi — ADR-0006)
+  // Pannello Mare: SOLO Fisica Costiera & Oceanografica Pura (zero semafori soggettivi — ADR-0006)
   const seaContainer = document.getElementById("sea-risk-items");
   const w = seaCond.waves;
   const wind = seaCond.wind;
@@ -1366,13 +1515,13 @@ function renderLandAndSeaPanels(landRisk, seaCond, conv) {
 
   const tideExtremaStr = (td.extrema || [])
     .slice(0, 4)
-    .map((ex) => `${ex.type === "HIGH" ? "▲ Alta" : "▼ Bassa"} ${ex.time} (${ex.height_cm} cm)`)
+    .map((ex) => `${ex.type === "HIGH" ? "Alta" : "Bassa"} ${ex.time} (${ex.height_cm} cm)`)
     .join(" • ");
 
   seaContainer.innerHTML = `
     <div class="risk-item border-physics">
       <div class="risk-item-title">
-        <span>💨 Cinematica del Vento & Scala Beaufort</span>
+        <span class="risk-item-title-label">${SVG_ICONS.wind} Cinematica del vento &amp; scala Beaufort</span>
         <span>${wind.speed_knots} kt (Raffica ${wind.gust_knots} kt)</span>
       </div>
       <div class="risk-item-desc">
@@ -1384,7 +1533,7 @@ function renderLandAndSeaPanels(landRisk, seaCond, conv) {
 
     <div class="risk-item border-physics">
       <div class="risk-item-title">
-        <span>🌊 Spettro Completo dell'Onda (Hs, Hmax, H1/1000, Periodo Tp & Ripidità)</span>
+        <span class="risk-item-title-label">${SVG_ICONS.wave} Spettro completo dell'onda (Hs, Hmax, H1/1000, periodo Tp &amp; ripidità)</span>
         <span>Hs ${w.significant_height_m} m | Hmax ${w.max_height_m} m</span>
       </div>
       <div class="risk-item-desc">
@@ -1397,18 +1546,18 @@ function renderLandAndSeaPanels(landRisk, seaCond, conv) {
 
     <div class="risk-item border-physics">
       <div class="risk-item-title">
-        <span>🔀 Partizione Spettrale: Onda Viva da Vento vs Swell Lungo</span>
+        <span class="risk-item-title-label">${SVG_ICONS.layers} Partizione spettrale: onda viva da vento vs swell lungo</span>
         <span>Hwind ${w.wind_wave_height_m} m | Hswell ${w.swell_height_m} m</span>
       </div>
       <div class="risk-item-desc">
-        • <strong>Onda Viva da Vento Locale:</strong> ${w.wind_wave_height_m} m @ ${w.wind_wave_period_s} s da ${w.wind_wave_cardinal} (${w.wind_wave_dir_deg}°)<br>
-        • <strong>Swell Primario (Mare Lungo):</strong> ${w.swell_height_m} m @ ${w.swell_period_s} s da ${w.swell_cardinal} (${w.swell_dir_deg}°)
+        • <strong>Onda viva da vento locale:</strong> ${w.wind_wave_height_m} m @ ${w.wind_wave_period_s} s da ${w.wind_wave_cardinal} (${w.wind_wave_dir_deg}°)<br>
+        • <strong>Swell primario (mare lungo):</strong> ${w.swell_height_m} m @ ${w.swell_period_s} s da ${w.swell_cardinal} (${w.swell_dir_deg}°)
       </div>
     </div>
 
     <div class="risk-item border-physics">
       <div class="risk-item-title">
-        <span>🏖️ Fisica Costiera di Rada: Rifrazione (Kr), Shoaling (Ks) & Risacca a Riva</span>
+        <span class="risk-item-title-label">${SVG_ICONS.anchor} Fisica costiera di rada: rifrazione (Kr), shoaling (Ks) &amp; risacca a riva</span>
         <span>Frangente ${bs.shore_breaker_height_m} m</span>
       </div>
       <div class="risk-item-desc">
@@ -1420,13 +1569,13 @@ function renderLandAndSeaPanels(landRisk, seaCond, conv) {
 
     <div class="risk-item border-physics">
       <div class="risk-item-title">
-        <span>🌙 Curva di Marea, Corrente Superficiale & Visibilità Ottica</span>
+        <span class="risk-item-title-label">${SVG_ICONS.clock} Curva di marea, corrente superficiale &amp; visibilità ottica</span>
         <span>${td.current_height_cm} cm (${td.current_phase})</span>
       </div>
       <div class="risk-item-desc">
-        • <strong>Estremi di Marea:</strong> ${tideExtremaStr || "In calcolo"} (Escursione ${td.range_cm} cm)<br>
-        • <strong>Corrente Superficiale:</strong> <strong>${cur.speed_knots} kt</strong> (${cur.speed_ms} m/s) verso ${cur.direction_cardinal} (drift vento ${cur.wind_drift_component_knots} kt)<br>
-        • <strong>Temp. Acqua (SST):</strong> ${w.sea_surface_temp_c}°C • <strong>Visibilità Ottica:</strong> ${cp.visibility_nm} NM (${cp.visibility_m} m)
+        • <strong>Estremi di marea:</strong> ${tideExtremaStr || "In calcolo"} (Escursione ${td.range_cm} cm)<br>
+        • <strong>Corrente superficiale:</strong> <strong>${cur.speed_knots} kt</strong> (${cur.speed_ms} m/s) verso ${cur.direction_cardinal} (drift vento ${cur.wind_drift_component_knots} kt)<br>
+        • <strong>Temp. acqua (SST):</strong> ${w.sea_surface_temp_c}°C • <strong>Visibilità ottica:</strong> ${cp.visibility_nm} NM (${cp.visibility_m} m)
       </div>
     </div>
   `;
@@ -1444,7 +1593,7 @@ function render5ModelsHourlyTable(hourly48) {
       const fmtM = (key) => {
         const obj = m[key];
         if (!obj || obj.wind_knots === null || obj.wind_knots === undefined) return "--";
-        return `<strong>${obj.wind_knots} kt</strong> <span style="color:var(--text-muted);font-size:0.72rem;">(r.${obj.gust_knots ?? "--"})</span>`;
+        return `<strong>${obj.wind_knots} kt</strong> <span style="color:var(--p-muted);font-size:0.8125rem;">(r.${obj.gust_knots ?? "--"})</span>`;
       };
       const spreadKt = h.model_spread?.wind_spread_knots ?? 0;
       const spreadColor = spreadKt >= 8 ? "#f97316" : spreadKt >= 5 ? "#fbbf24" : "#34d399";
@@ -1458,8 +1607,8 @@ function render5ModelsHourlyTable(hourly48) {
           <td>${fmtM("ecmwf_ifs025")}</td>
           <td>${fmtM("gfs_seamless")}</td>
           <td>${fmtM("met_norway")}</td>
-          <td style="color:${spreadColor};font-weight:700;">Δ ${spreadKt} kt</td>
-          <td>${h.precip_mm} mm <span style="color:#38bdf8;font-size:0.72rem;">(max ${h.precip_max_lam_mm})</span></td>
+          <td style="color:${spreadColor};font-weight:600;">Δ ${spreadKt} kt</td>
+          <td>${h.precip_mm} mm <span style="color:#5ab9fc;font-size:0.8125rem;">(max ${h.precip_max_lam_mm})</span></td>
           <td>Hs <strong>${h.wave_hs_m}m</strong> / Hmax ${h.wave_hmax_m}m @ ${h.wave_period_s}s</td>
           <td>${h.shore_breaker_m} m</td>
         </tr>
@@ -1494,24 +1643,24 @@ async function calculateCoastalRoute() {
     const cmp = plan.physical_comparison_outbound_vs_inbound || {};
     kpiGrid.innerHTML = `
       <div class="kpi-box">
-        <div class="kpi-label">Distanza Costiera (Andata / A+R)</div>
+        <div class="kpi-label">Distanza costiera (andata / A+R)</div>
         <div class="kpi-value">${plan.one_way_distance_nm} / ${plan.total_distance_nm} NM</div>
         <div class="kpi-sub">Rotta su grafo che non taglia i capi</div>
       </div>
       <div class="kpi-box">
-        <div class="kpi-label">Tempo Navigazione Effettivo</div>
+        <div class="kpi-label">Tempo navigazione effettivo</div>
         <div class="kpi-value">${plan.estimated_navigation_minutes} min</div>
         <div class="kpi-sub">+ ${plan.planned_stop_minutes} min sosta = ${plan.estimated_total_minutes} min tot</div>
       </div>
       <div class="kpi-box">
-        <div class="kpi-label">Velocità Media Richiesta</div>
+        <div class="kpi-label">Velocità media richiesta</div>
         <div class="kpi-value">${plan.required_average_speed_knots} kt</div>
         <div class="kpi-sub">Per rientrare in ${plan.planned_duration_minutes} min totali</div>
       </div>
       <div class="kpi-box">
-        <div class="kpi-label">Orario Limite Rientro (Turnaround)</div>
+        <div class="kpi-label">Orario limite rientro (turnaround)</div>
         <div class="kpi-value" style="color:#fbbf24;">${plan.schedule.latest_turnaround_time}</div>
-        <div class="kpi-sub">ETA Dest: ${plan.schedule.eta_destination} • Rientro: ${plan.schedule.eta_return_origin}</div>
+        <div class="kpi-sub">ETA dest: ${plan.schedule.eta_destination} • Rientro: ${plan.schedule.eta_return_origin}</div>
       </div>
     `;
 
@@ -1527,7 +1676,7 @@ async function calculateCoastalRoute() {
           <div class="risk-item-desc">
             ${
               leg.amp_speed_limit_knots
-                ? `⚠️ <strong>Vincolo Area Marina Protetta (AMP Portofino):</strong> velocità limitata a <strong>max ${leg.amp_speed_limit_knots} kt</strong>`
+                ? `<span style="display:inline-flex;align-items:center;gap:4px;color:#fbbf24;">${SVG_ICONS.alert} <strong>Vincolo Area Marina Protetta (AMP Portofino):</strong> velocità limitata a <strong>max ${leg.amp_speed_limit_knots} kt</strong></span>`
                 : "Navigazione libera fuori dalle zone di riserva integrale/generale AMP."
             }
           </div>
@@ -1540,7 +1689,7 @@ async function calculateCoastalRoute() {
       `
       <div class="risk-item border-green">
         <div class="risk-item-title">
-          <span>🔄 Confronto Fisico Andata vs Ritorno</span>
+          <span class="risk-item-title-label">${SVG_ICONS.compass} Confronto fisico andata vs ritorno</span>
           <span>Partenza ${plan.schedule.departure_time}</span>
         </div>
         <div class="risk-item-desc">${cmp.delta_summary || ""}</div>
@@ -1553,7 +1702,7 @@ async function calculateCoastalRoute() {
       }
       const latlngs = plan.waypoints.map((w) => [w.lat, w.lon]);
       state.routePolyline = L.polyline(latlngs, {
-        color: "#38bdf8",
+        color: "#5ab9fc",
         weight: 4,
         dashArray: "6, 6",
       }).addTo(state.map);
@@ -1567,8 +1716,8 @@ function renderAIBulletinAndOfficialArpal(bulletin, arpal) {
   if (bulletin) {
     const badge = document.getElementById("ai-engine-badge");
     badge.textContent = bulletin.ai_powered
-      ? "✨ Google Gemini Analista Sinottico"
-      : "🧠 Motore Sinottico Fisico Ligure";
+      ? "Google Gemini — Analista sinottico"
+      : "Motore sinottico fisico ligure";
 
     document.getElementById("ai-headline").textContent = bulletin.headline;
     document.getElementById("ai-synoptic-body").textContent =
@@ -1578,7 +1727,7 @@ function renderAIBulletinAndOfficialArpal(bulletin, arpal) {
 
     const takeawaysGrid = document.getElementById("ai-takeaways-grid");
     takeawaysGrid.innerHTML = (bulletin.key_takeaways || [])
-      .map((item) => `<div class="ai-takeaway-item">🔹 ${item}</div>`)
+      .map((item) => `<div class="ai-takeaway-item">${item}</div>`)
       .join("");
   }
 
@@ -1587,7 +1736,7 @@ function renderAIBulletinAndOfficialArpal(bulletin, arpal) {
   if (!arpalBox || !arpal) return;
 
   if (arpalBadge) {
-    arpalBadge.textContent = arpal.live_extracted ? "ARPAL LIVE" : "ARPAL SINTESI";
+    arpalBadge.textContent = arpal.live_extracted ? "ARPAL live" : "ARPAL sintesi";
   }
 
   const daysHtml = (arpal.days || [])
@@ -1595,7 +1744,7 @@ function renderAIBulletinAndOfficialArpal(bulletin, arpal) {
       (d) => `
       <div class="risk-item border-physics">
         <div class="risk-item-title">
-          <span>📅 ${d.label}</span>
+          <span class="risk-item-title-label">${SVG_ICONS.calendar} ${d.label}</span>
           <span>Zonizzazione Liguria</span>
         </div>
         <div class="risk-item-desc">
@@ -1612,7 +1761,7 @@ function renderAIBulletinAndOfficialArpal(bulletin, arpal) {
     `
     <div class="risk-item border-green">
       <div class="risk-item-title">
-        <span>Situazione Sinottica Regionale (${arpal.source || "ARPAL"})</span>
+        <span>Situazione sinottica regionale (${arpal.source || "ARPAL"})</span>
         <span>${arpal.issued_at || ""}</span>
       </div>
       <div class="risk-item-desc">${arpal.synoptic_situation || ""}</div>
@@ -1645,7 +1794,7 @@ function renderCharts(hourly48) {
       datasets: [
         {
           type: "line",
-          label: "Temp Consenso (°C)",
+          label: "Temp consenso (°C)",
           data: consensusTemp,
           borderColor: "#f59e0b",
           backgroundColor: "rgba(245, 158, 11, 0.15)",
@@ -1655,21 +1804,21 @@ function renderCharts(hourly48) {
           pointRadius: 2,
         },
         {
-          label: "AROME 1.3km Pioggia (mm/h)",
+          label: "AROME 1.3km pioggia (mm/h)",
           data: aromeRain,
-          backgroundColor: "rgba(56, 189, 248, 0.8)",
+          backgroundColor: "rgba(90, 185, 252, 0.82)",
           yAxisID: "yRain",
         },
         {
-          label: "ICON-D2 2km Pioggia (mm/h)",
+          label: "ICON-D2 2km pioggia (mm/h)",
           data: iconRain,
           backgroundColor: "rgba(16, 185, 129, 0.75)",
           yAxisID: "yRain",
         },
         {
-          label: "ECMWF 9km Pioggia (mm/h)",
+          label: "ECMWF 9km pioggia (mm/h)",
           data: ecmwfRain,
-          backgroundColor: "rgba(14, 165, 233, 0.7)",
+          backgroundColor: "rgba(2, 132, 199, 0.72)",
           yAxisID: "yRain",
         },
       ],
@@ -1678,16 +1827,16 @@ function renderCharts(hourly48) {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { labels: { color: "#cbd5e1", font: { size: 11 } } },
+        legend: { labels: { color: "#e9edf3", font: { size: 13, family: "IBM Plex Sans, sans-serif" } } },
       },
       scales: {
-        x: { ticks: { color: "#94a3b8" }, grid: { color: "rgba(148,163,184,0.08)" } },
+        x: { ticks: { color: "#8891a1" }, grid: { color: "rgba(233,237,243,0.07)" } },
         yRain: {
           position: "left",
           beginAtZero: true,
-          title: { display: true, text: "mm/h", color: "#38bdf8" },
-          ticks: { color: "#38bdf8" },
-          grid: { color: "rgba(148,163,184,0.1)" },
+          title: { display: true, text: "mm/h", color: "#5ab9fc" },
+          ticks: { color: "#5ab9fc" },
+          grid: { color: "rgba(233,237,243,0.09)" },
         },
         yTemp: {
           position: "right",
@@ -1716,7 +1865,7 @@ function renderCharts(hourly48) {
       labels,
       datasets: [
         {
-          label: useKnots ? "Vento Medio (kt)" : "Vento Medio (km/h)",
+          label: useKnots ? "Vento medio (kt)" : "Vento medio (km/h)",
           data: windSeries,
           borderColor: "#10b981",
           backgroundColor: "rgba(16, 185, 129, 0.15)",
@@ -1734,17 +1883,17 @@ function renderCharts(hourly48) {
           borderWidth: 2,
         },
         {
-          label: "Onda Significativa Hs (m)",
+          label: "Onda significativa Hs (m)",
           data: waveHsSeries,
-          borderColor: "#38bdf8",
-          backgroundColor: "rgba(56, 189, 248, 0.2)",
+          borderColor: "#5ab9fc",
+          backgroundColor: "rgba(90, 185, 252, 0.2)",
           fill: true,
           yAxisID: "yWave",
           tension: 0.35,
           borderWidth: 2.5,
         },
         {
-          label: "Onda Max Statistica Hmax (m)",
+          label: "Onda max statistica Hmax (m)",
           data: waveHmaxSeries,
           borderColor: "#f59e0b",
           borderDash: [2, 2],
@@ -1758,10 +1907,10 @@ function renderCharts(hourly48) {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { labels: { color: "#cbd5e1", font: { size: 11 } } },
+        legend: { labels: { color: "#e9edf3", font: { size: 13, family: "IBM Plex Sans, sans-serif" } } },
       },
       scales: {
-        x: { ticks: { color: "#94a3b8" }, grid: { color: "rgba(148,163,184,0.08)" } },
+        x: { ticks: { color: "#8891a1" }, grid: { color: "rgba(233,237,243,0.07)" } },
         yWind: {
           position: "left",
           beginAtZero: true,
@@ -1771,13 +1920,13 @@ function renderCharts(hourly48) {
             color: "#10b981",
           },
           ticks: { color: "#10b981" },
-          grid: { color: "rgba(148,163,184,0.1)" },
+          grid: { color: "rgba(233,237,243,0.09)" },
         },
         yWave: {
           position: "right",
           beginAtZero: true,
-          title: { display: true, text: "Onda (m)", color: "#38bdf8" },
-          ticks: { color: "#38bdf8" },
+          title: { display: true, text: "Onda (m)", color: "#5ab9fc" },
+          ticks: { color: "#5ab9fc" },
           grid: { drawOnChartArea: false },
         },
       },
@@ -1801,8 +1950,8 @@ function render7DayTable(days) {
         <tr>
           <td><strong>${dayLabel}</strong></td>
           <td>${d.weather_description}</td>
-          <td><span style="color:#94a3b8">${d.temp_min_c}°</span> / <strong>${d.temp_max_c}°C</strong></td>
-          <td><strong>${d.precip_sum_mm} mm</strong> <span style="font-size:0.75rem;color:#38bdf8">(LAM max ${d.precip_max_model_mm} mm)</span></td>
+          <td><span style="color:var(--p-muted)">${d.temp_min_c}°</span> / <strong>${d.temp_max_c}°C</strong></td>
+          <td><strong>${d.precip_sum_mm} mm</strong> <span style="font-size:0.8125rem;color:#5ab9fc">(LAM max ${d.precip_max_model_mm} mm)</span></td>
           <td>${d.wind_dominant_name} (${d.wind_dominant_cardinal})</td>
           <td>${d.gust_max_kmh} km/h | <strong>${d.gust_max_knots} kt</strong> (F${d.beaufort_max})</td>
           <td><strong>Hs ${d.wave_max_hs_m}m</strong> (Hmax ${d.wave_max_hmax_m}m) @ ${d.wave_period_max_s}s — <em>${d.douglas_max_label}</em></td>
