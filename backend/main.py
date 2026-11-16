@@ -141,7 +141,7 @@ async def _load_or_compute_weather_package(
         )
     )
     loc_key = location_meta.id if location_meta else district.id
-    cache_key = f"pkg:v2.2:{loc_key}:{lat:.3f}:{lon:.3f}"
+    cache_key = f"pkg:v2.5:{loc_key}:{lat:.3f}:{lon:.3f}"
 
     if not force_refresh:
         cached = cache.get(cache_key, allow_stale=False)

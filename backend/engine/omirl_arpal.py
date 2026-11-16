@@ -418,11 +418,23 @@ async def fetch_omirl_station_chart(
                 "points": pts[-36:],  # Ultime ore al minuto
             }
         )
+    primary_pts = series_out[0]["points"] if series_out else []
+    vals = [p["value"] for p in primary_pts]
+    min_val = min(vals) if vals else None
+    max_val = max(vals) if vals else None
+    unit = {"Vento": "km/h", "Termo": "°C", "Pluvio": "mm", "Idro": "m"}.get(sensor_type, "")
     return {
         "code": short_code.upper(),
         "sensor": sensor_type,
         "title": raw.get("title") or f"Centralina OMIRL {short_code.upper()}",
         "subtitle": raw.get("subTitle") or "",
+        "available": bool(primary_pts),
+        "unit": unit,
+        "min_value": min_val,
+        "max_value": max_val,
+        "recent_24_points": [
+            {"timestamp": p["time_label"], "value": p["value"]} for p in primary_pts[-24:]
+        ],
         "series": series_out,
     }
 
@@ -458,6 +470,9 @@ async def fetch_omirl_live_observations(
         if code and is_omirl_refdate_fresh(p_item.get("refDate")) and p_item.get("value") is not None:
             pluvio_by_code[code] = p_item
 
+    def _in_genova_bbox(lat: float, lon: float) -> bool:
+        return 44.10 <= lat <= 44.72 and 8.55 <= lon <= 9.56
+
     def _nearest_sensor_value(
         lat: float, lon: float, sensor_map: dict[str, dict[str, Any]], code: str, default_val: float
     ) -> float:
@@ -466,11 +481,52 @@ async def fetch_omirl_live_observations(
         best_v = default_val
         best_d = 999.0
         for item in sensor_map.values():
-            d = haversine_km(lat, lon, float(item.get("lat", 0)), float(item.get("lon", 0)))
+            d = haversine_km(lat, lon, float(item.get("lat") or 0.0), float(item.get("lon") or 0.0))
             if d < best_d and d <= 12.0:
                 best_d = d
                 best_v = round(float(item["value"]), 1)
         return best_v
+
+    def _build_weather_station(
+        code: str,
+        item: dict[str, Any],
+        lat: float,
+        lon: float,
+        sensor_label: str,
+        wind_kmh: float,
+        gust_kmh: float,
+        wind_dir_deg: float,
+        has_live_wind: bool,
+    ) -> dict[str, Any]:
+        elev_m = int(item.get("alt") or 10)
+        ref_str = str(item.get("refDate") or "")
+        obs_time = ref_str[11:16] if len(ref_str) >= 16 else now_label
+        temp_val = _nearest_sensor_value(
+            lat, lon, termo_by_code, code, round(base_temp - max(0, elev_m - 20) * 0.0062, 1)
+        )
+        rain_val = _nearest_sensor_value(lat, lon, pluvio_by_code, code, round(base_rain_1h, 1))
+        return {
+            "code": code,
+            "name": item.get("name") or code,
+            "sensor": sensor_label,
+            "muni": item.get("municipality") or "Provincia di Genova",
+            "lat": lat,
+            "lon": lon,
+            "elev_m": elev_m,
+            "distance_km": haversine_km(target_lat, target_lon, lat, lon),
+            "observed_at": obs_time,
+            "temp_c": temp_val,
+            "precip_1h_mm": rain_val,
+            "wind_kmh": round(wind_kmh, 1),
+            "wind_knots": round(wind_kmh / 1.852, 1),
+            "gust_kmh": round(gust_kmh, 1),
+            "gust_knots": round(gust_kmh / 1.852, 1),
+            "wind_dir_deg": round(wind_dir_deg, 0),
+            "has_live_wind": has_live_wind,
+            "has_live_temp": code in termo_by_code,
+            "has_live_rain": code in pluvio_by_code,
+            "is_live_rest": True,
+        }
 
     # 2. Stazioni Anemometriche & Meteo Reali nella Provincia di Genova
     weather_stations: list[dict[str, Any]] = []
@@ -480,45 +536,69 @@ async def fetch_omirl_live_observations(
         lat = float(w_item.get("lat") or 0.0)
         lon = float(w_item.get("lon") or 0.0)
         code = str(w_item.get("shortCode") or "").upper()
-        if not (44.10 <= lat <= 44.72 and 8.55 <= lon <= 9.56):
+        if not code or not _in_genova_bbox(lat, lon):
             continue
         if not is_omirl_refdate_fresh(w_item.get("refDate")):
             continue
         val_kmh = float(w_item.get("value") or 0.0)
         dir_deg = float(w_item.get("increment") or 0.0)
-        elev_m = int(w_item.get("alt") or 10)
-        ref_str = str(w_item.get("refDate") or "")
-        obs_time = ref_str[11:16] if len(ref_str) >= 16 else now_label
-        dist = haversine_km(target_lat, target_lon, lat, lon)
-
-        temp_val = _nearest_sensor_value(
-            lat, lon, termo_by_code, code, round(base_temp - max(0, elev_m - 20) * 0.0062, 1)
-        )
-        rain_val = _nearest_sensor_value(lat, lon, pluvio_by_code, code, round(base_rain_1h, 1))
         gust_kmh = round(val_kmh * 1.38, 1)
 
         weather_stations.append(
-            {
-                "code": code,
-                "name": w_item.get("name") or code,
-                "sensor": "Vento",
-                "muni": w_item.get("municipality") or "Provincia di Genova",
-                "lat": lat,
-                "lon": lon,
-                "elev_m": elev_m,
-                "distance_km": dist,
-                "observed_at": obs_time,
-                "temp_c": temp_val,
-                "precip_1h_mm": rain_val,
-                "wind_kmh": round(val_kmh, 1),
-                "wind_knots": round(val_kmh / 1.852, 1),
-                "gust_kmh": gust_kmh,
-                "gust_knots": round(gust_kmh / 1.852, 1),
-                "wind_dir_deg": round(dir_deg, 0),
-                "is_live_rest": True,
-            }
+            _build_weather_station(
+                code=code,
+                item=w_item,
+                lat=lat,
+                lon=lon,
+                sensor_label="Vento",
+                wind_kmh=val_kmh,
+                gust_kmh=gust_kmh,
+                wind_dir_deg=dir_deg,
+                has_live_wind=True,
+            )
         )
         seen_wind_codes.add(code)
+
+    # 2b. Fusione stazioni solo Termo e Pluvio nella Provincia di Genova (~90+ stazioni totali)
+    def _nearest_wind_values(lat: float, lon: float) -> tuple[float, float, float]:
+        best_kmh = base_wind_kmh
+        best_gust = base_gust_kmh
+        best_dir = base_dir_deg
+        best_d = 999.0
+        for ws in weather_stations:
+            if not ws.get("has_live_wind"):
+                continue
+            d = haversine_km(lat, lon, float(ws["lat"]), float(ws["lon"]))
+            if d < best_d and d <= 20.0:
+                best_d = d
+                best_kmh = float(ws["wind_kmh"])
+                best_gust = float(ws["gust_kmh"])
+                best_dir = float(ws["wind_dir_deg"])
+        return best_kmh, best_gust, best_dir
+
+    seen_station_codes: set[str] = set(seen_wind_codes)
+    for code, item in (*termo_by_code.items(), *pluvio_by_code.items()):
+        if code in seen_station_codes:
+            continue
+        lat = float(item.get("lat") or 0.0)
+        lon = float(item.get("lon") or 0.0)
+        if not _in_genova_bbox(lat, lon):
+            continue
+        w_kmh, w_gust, w_dir = _nearest_wind_values(lat, lon)
+        weather_stations.append(
+            _build_weather_station(
+                code=code,
+                item=item,
+                lat=lat,
+                lon=lon,
+                sensor_label="Termo/Pluvio",
+                wind_kmh=w_kmh,
+                gust_kmh=w_gust,
+                wind_dir_deg=w_dir,
+                has_live_wind=False,
+            )
+        )
+        seen_station_codes.add(code)
 
     # 3. Idrometri Fluviali Reali sui 24 Torrenti della Provincia di Genova
     hydrometers: list[dict[str, Any]] = []
@@ -526,7 +606,7 @@ async def fetch_omirl_live_observations(
         lat = float(h_item.get("lat") or 0.0)
         lon = float(h_item.get("lon") or 0.0)
         code = str(h_item.get("shortCode") or "").upper()
-        if not (44.10 <= lat <= 44.72 and 8.55 <= lon <= 9.56):
+        if not _in_genova_bbox(lat, lon):
             continue
         if not is_omirl_refdate_fresh(h_item.get("refDate")):
             continue
@@ -615,6 +695,9 @@ async def fetch_omirl_live_observations(
                         "gust_kmh": round(base_gust_kmh, 1),
                         "gust_knots": round(base_gust_kmh / 1.852, 1),
                         "wind_dir_deg": round(base_dir_deg, 0),
+                        "has_live_wind": False,
+                        "has_live_temp": False,
+                        "has_live_rain": False,
                         "is_live_rest": False,
                     }
                 )
@@ -632,7 +715,10 @@ async def fetch_omirl_live_observations(
                 {
                     "code": b_item.get("shortCode", "BOACM"),
                     "name": b_item.get("name", "Boa Capo Mele (OMIRL)"),
+                    "lat": float(b_item.get("lat") or 43.918),
+                    "lon": float(b_item.get("lon") or 8.185),
                     "wave_hs_m": round(float(b_item["value"]), 2),
+                    "increment_m": round(float(b_item.get("increment") or 0.0), 2),
                     "observed_at": ref_str[11:16] if len(ref_str) >= 16 else now_label,
                     "is_live_rest": True,
                 }
@@ -666,10 +752,12 @@ async def fetch_omirl_live_observations(
         "network_name": "Rete Osservativa OMIRL — Regione Liguria / ARPAL (Live REST)",
         "wms_endpoint": OMIRL_WMS_URL,
         "live_sensors_count": {
-            "wind_stations": len(weather_stations),
+            "wind_stations": len(seen_wind_codes),
+            "total_weather_stations": len(weather_stations),
             "river_hydrometers": len(hydrometers),
             "buoys": len(buoys_live),
         },
+        "marine_wave_buoy": buoys_live[0] if buoys_live else None,
         "buoys_live": buoys_live,
         "nearest_weather_stations": weather_stations[:8],
         "all_weather_stations": weather_stations,
