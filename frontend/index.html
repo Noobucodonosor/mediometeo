@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#0a0d14">
   <meta name="page-type" content="software">
   <meta name="site-kind" content="software">
-  <title>MedioMeteo Genova — Sala operativa Terra &amp; Mare (67 Comuni, OMIRL live, 5 modelli &amp; fisica costiera)</title>
+  <title>MedioMeteo Genova — Sala operativa Terra e Mare</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,159 +18,119 @@
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     crossorigin=""
   />
-  <link rel="stylesheet" href="/static/styles.css?v=2.5">
+  <link rel="stylesheet" href="/static/styles.css?v=2.6">
 </head>
 <body>
-  <!-- 1. Topbar compatta "Sala operativa" -->
+  <!-- 1. Topbar compatta con selettore località unificato e toolbar operativa -->
   <header class="topbar">
     <div class="brand">
-      <div class="brand-badge" aria-hidden="true">
-        <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="8" cy="8" r="5.5"/>
-          <circle cx="8" cy="8" r="1.5"/>
-          <path d="M8 1v2M8 13v2M1 8h2M13 8h2"/>
-        </svg>
-      </div>
-      <div>
-        <div class="brand-title">MedioMeteo Genova</div>
-        <div class="brand-subtitle">67 Comuni • Sensori OMIRL live • 5 modelli (AROME 1.3km / ICON-D2 / ECMWF / GFS / MET.no)</div>
+      <div class="brand-badge" aria-hidden="true">MM</div>
+      <div class="brand-name">
+        <span class="brand-title">MedioMeteo</span>
+        <span class="brand-region">Genova</span>
       </div>
     </div>
 
-    <div class="controls-bar">
-      <!-- Switch Dual-Mode Terra / Mare -->
-      <div class="mode-switch" role="group" aria-label="Modalità operativa Terra o Mare">
-        <button id="btn-mode-land" type="button" class="mode-btn active-land">
-          <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M1.5 13L6 4.5l3.5 5 2-2.5L14.5 13H1.5z"/>
-          </svg>
-          Terra
-        </button>
-        <button id="btn-mode-sea" type="button" class="mode-btn">
-          <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M1.5 6.5c1.5-1.5 3-1.5 4.5 0s3 1.5 4.5 0 3-1.5 4.5 0"/>
-            <path d="M1.5 10.5c1.5-1.5 3-1.5 4.5 0s3 1.5 4.5 0 3-1.5 4.5 0"/>
-          </svg>
-          Mare (fisica pura)
-        </button>
+    <!-- Selettore località unificato (ricerca + categoria in unico popover) -->
+    <div class="loc-picker-wrap">
+      <button
+        id="loc-picker-btn"
+        type="button"
+        class="loc-picker-btn"
+        aria-haspopup="dialog"
+        aria-expanded="false"
+        aria-label="Seleziona località Provincia di Genova"
+      >
+        <span id="loc-picker-label" class="loc-picker-label">Genova</span>
+        <span id="loc-picker-meta" class="loc-picker-meta">Comune</span>
+        <svg class="ui-chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 4.5L6 7.5L9 4.5"/>
+        </svg>
+      </button>
+
+      <div id="loc-picker-panel" class="loc-picker-panel" role="dialog" aria-label="Cerca località" hidden>
+        <div class="loc-picker-search-row">
+          <input
+            id="loc-search-input"
+            type="search"
+            class="loc-picker-search"
+            placeholder="Cerca comune, quartiere, rada o valico..."
+            aria-label="Cerca tra 118 località della Provincia di Genova"
+            autocomplete="off"
+          />
+        </div>
+        <div class="loc-picker-chips" role="group" aria-label="Filtra categoria geografica">
+          <button type="button" class="loc-chip" data-loc-type="" aria-pressed="true">Tutte (118)</button>
+          <button type="button" class="loc-chip" data-loc-type="comune" aria-pressed="false">Comuni</button>
+          <button type="button" class="loc-chip" data-loc-type="quartiere" aria-pressed="false">Quartieri</button>
+          <button type="button" class="loc-chip" data-loc-type="rada_porto" aria-pressed="false">Rade e porti</button>
+          <button type="button" class="loc-chip" data-loc-type="valico" aria-pressed="false">Valichi</button>
+        </div>
+        <div id="loc-picker-list" class="loc-picker-list" role="listbox" aria-label="Elenco località"></div>
       </div>
 
-      <!-- Filtro rapido categoria -->
-      <select id="loc-type-filter" class="select-filter" aria-label="Filtra categoria geografica">
+      <!-- Controlli nativi sincronizzati per compatibilità test e script -->
+      <select id="loc-type-filter" class="sr-only" tabindex="-1" aria-hidden="true">
         <option value="">Tutte (118)</option>
         <option value="comune">67 Comuni</option>
         <option value="quartiere">25 Quartieri GE</option>
-        <option value="rada_porto">20 Rade &amp; porti</option>
+        <option value="rada_porto">20 Rade e porti</option>
         <option value="valico">6 Valichi</option>
       </select>
-
-      <!-- Ricerca testuale istantanea -->
-      <input
-        id="loc-search-input"
-        type="search"
-        class="search-input"
-        placeholder="Cerca località..."
-        aria-label="Cerca tra i 67 Comuni, Quartieri o Rade"
-      />
-
-      <!-- Selettore località -->
-      <select id="district-select" class="select-district" aria-label="Seleziona località Provincia di Genova">
-        <option value="COM-GENOVA">Caricamento località...</option>
+      <select id="district-select" class="sr-only" tabindex="-1" aria-hidden="true">
+        <option value="COM-GENOVA">Genova</option>
       </select>
+    </div>
 
-      <button id="btn-gps" type="button" class="btn-action" title="Centra sulla tua posizione GPS">
-        <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="8" cy="8" r="4.5"/>
-          <circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/>
-          <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2"/>
-        </svg>
-        GPS
-      </button>
-
-      <button id="btn-refresh" type="button" class="btn-action" title="Aggiorna sensori OMIRL e modelli in tempo reale">
-        <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M13.5 8a5.5 5.5 0 1 1-1.4-3.7"/>
-          <path d="M13.5 2.5v2.8h-2.8"/>
-        </svg>
-        Live
-      </button>
-
-      <a href="/orologio" class="btn-action" title="Apri HUD Smartwatch da polso">
-        <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <rect x="4" y="3.5" width="8" height="9" rx="1.5"/>
-          <path d="M5.5 1.5h5M5.5 14.5h5M8 6.5V8l1.2 1"/>
-        </svg>
-        HUD
-      </a>
+    <!-- Toolbar operativa (single tab stop via focusgroup / roving tabindex) -->
+    <div class="controls-bar" role="toolbar" focusgroup="toolbar wrap" aria-label="Controlli operativi">
+      <div class="mode-switch" role="group" aria-label="Modalità operativa">
+        <button id="btn-mode-land" type="button" class="mode-btn active-land" aria-pressed="true">Terra</button>
+        <button id="btn-mode-sea" type="button" class="mode-btn" aria-pressed="false">Mare</button>
+      </div>
+      <span class="toolbar-sep" role="separator" aria-orientation="vertical"></span>
+      <button id="btn-gps" type="button" class="btn-action" title="Centra sulla tua posizione GPS">Posizione</button>
+      <button id="btn-refresh" type="button" class="btn-action" title="Aggiorna sensori OMIRL e modelli in tempo reale">Aggiorna</button>
+      <a href="/orologio" class="btn-action" title="Apri vista smartwatch da polso">Orologio</a>
     </div>
   </header>
 
-  <!-- 2. Striscia di Telemetria Live ("Always-On Telemetry HUD") -->
+  <!-- 2. Striscia di telemetria live ("Always-On Telemetry HUD") — matrice 1px piatta -->
   <section class="telemetry-hud" aria-live="polite" aria-label="Telemetria in tempo reale della località selezionata">
     <div class="hud-loc-block">
-      <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;">
+      <div class="hud-loc-head">
         <strong id="banner-district-name" class="hud-loc-title">Genova</strong>
         <span id="banner-zone-tag" class="badge-pill level-green">Zona B</span>
-        <span id="banner-type-tag" class="badge-pill level-physics">Comune</span>
+        <span id="banner-type-tag" class="hud-loc-meta">Comune</span>
       </div>
       <p id="banner-microclimate" class="hud-loc-sub pretty-copy">
-        Seleziona un punto sulla mappa live per aprire i sensori reali OMIRL e la fisica locale.
+        Seleziona un punto sulla mappa live per leggere i sensori OMIRL e la fisica locale.
       </p>
     </div>
 
     <div class="hud-metrics-strip">
       <div class="hud-metric">
-        <span class="hud-m-label">
-          <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M9.5 9.2V3.5a1.5 1.5 0 0 0-3 0v5.7a2.8 2.8 0 1 0 3 0z"/>
-          </svg>
-          Meteo &amp; temp
-        </span>
+        <span class="hud-m-label">Temperatura</span>
         <strong id="hud-val-temp" class="hud-m-val">--°C</strong>
         <span id="hud-sub-temp" class="hud-m-sub">--</span>
       </div>
       <div class="hud-metric">
-        <span class="hud-m-label">
-          <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M2 6h8.5a2 2 0 1 0-2-2"/>
-            <path d="M2 10h10.5a2 2 0 1 1-2 2"/>
-            <path d="M2 8h6"/>
-          </svg>
-          Vento reale / ensemble
-        </span>
+        <span class="hud-m-label">Vento</span>
         <strong id="hud-val-wind" class="hud-m-val">-- kt</strong>
         <span id="hud-sub-wind" class="hud-m-sub">--</span>
       </div>
       <div class="hud-metric">
-        <span class="hud-m-label">
-          <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M1.5 6.5c1.5-1.5 3-1.5 4.5 0s3 1.5 4.5 0 3-1.5 4.5 0"/>
-            <path d="M1.5 10.5c1.5-1.5 3-1.5 4.5 0s3 1.5 4.5 0 3-1.5 4.5 0"/>
-          </svg>
-          Onda Hs / Hmax @ Tp
-        </span>
+        <span class="hud-m-label">Moto ondoso</span>
         <strong id="hud-val-wave" class="hud-m-val">-- m</strong>
         <span id="hud-sub-wave" class="hud-m-sub">--</span>
       </div>
       <div class="hud-metric">
-        <span class="hud-m-label">
-          <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M4 9.5h8a2.5 2.5 0 0 0 .3-5A3.5 3.5 0 0 0 5.6 3.8 2.8 2.8 0 0 0 4 9.5z"/>
-            <path d="M5.5 11.8l-.8 2M8.5 11.8l-.8 2M11.5 11.8l-.8 2"/>
-          </svg>
-          Pioggia &amp; risacca
-        </span>
+        <span class="hud-m-label">Pioggia e risacca</span>
         <strong id="hud-val-rain" class="hud-m-val">-- mm/h</strong>
         <span id="hud-sub-rain" class="hud-m-sub">--</span>
       </div>
       <div class="hud-metric">
-        <span class="hud-m-label">
-          <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="8" cy="8" r="6"/>
-            <path d="M8 8l2.8-2.8"/>
-          </svg>
-          Barometro &amp; modelli
-        </span>
+        <span class="hud-m-label">Pressione</span>
         <strong id="hud-val-press" class="hud-m-val">---- hPa</strong>
         <div class="hud-metric-badges">
           <span id="badge-convergence" class="badge-pill level-green">Conv: --</span>
@@ -181,87 +141,54 @@
     </div>
   </section>
 
-  <!-- 3. Barra delle 6 Schede Chiuse Mutuamente Esclusive (Default all'avvio: 3. Mappa operativa live) -->
-  <nav class="tabs-nav" role="tablist" aria-label="Sezioni Sala Operativa MedioMeteo Genova">
-    <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-adesso" id="btn-tab-adesso">
-      <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M8 13V6"/>
-        <circle cx="8" cy="5" r="1.5"/>
-        <path d="M4.8 7.8a4.5 4.5 0 0 1 0-5.6M11.2 2.2a4.5 4.5 0 0 1 0 5.6"/>
-      </svg>
-      1. Adesso — Sensori &amp; cam
-    </button>
-    <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-nowcast" id="btn-tab-nowcast">
-      <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle cx="8" cy="8.5" r="5.5"/>
-        <path d="M8 5.5v3l2 1.5M6.5 1.5h3"/>
-      </svg>
-      2. Nowcast 0-3h &amp; fisica
-    </button>
-    <button type="button" class="tab-btn active" role="tab" aria-selected="true" data-tab="tab-mappa" id="btn-tab-mappa">
-      <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polygon points="1.5,3.5 5.8,2 10.2,3.5 14.5,2 14.5,12.5 10.2,14 5.8,12.5 1.5,14"/>
-        <path d="M5.8 2v10.5M10.2 3.5V14"/>
-      </svg>
-      3. Mappa operativa live
-    </button>
-    <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-modelli" id="btn-tab-modelli">
-      <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M2 13.5h12M4 11V7M8 11V4M12 11V5.5"/>
-      </svg>
-      4. Cinque modelli &amp; 7 giorni
-    </button>
-    <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-rotta" id="btn-tab-rotta">
-      <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle cx="8" cy="8" r="6"/>
-        <polygon points="10.2,5.8 8.8,9.2 5.8,10.2 7.2,6.8" fill="currentColor" stroke="none"/>
-      </svg>
-      5. Rotta costiera &amp; ETA
-    </button>
-    <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-bollettini" id="btn-tab-bollettini">
-      <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <rect x="3" y="2" width="10" height="12" rx="1.2"/>
-        <path d="M5.5 5.5h5M5.5 8.5h5M5.5 11.5h3"/>
-      </svg>
-      6. Bollettini &amp; analisi AI
-    </button>
+  <!-- 3. Barra tab lineare singola (default all'avvio: Mappa) -->
+  <nav class="tabs-bar-wrap" aria-label="Sezioni MedioMeteo Genova">
+    <div class="tabs-nav scroller" role="tablist" focusgroup="tablist nomemory" aria-label="Viste principali">
+      <button type="button" class="tab-btn active" role="tab" aria-selected="true" focusgroupstart data-tab="tab-mappa" id="btn-tab-mappa">
+        Mappa
+      </button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-adesso" id="btn-tab-adesso">
+        Adesso
+      </button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-nowcast" id="btn-tab-nowcast">
+        Nowcast 3h
+      </button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-modelli" id="btn-tab-modelli">
+        Modelli
+      </button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-rotta" id="btn-tab-rotta">
+        Rotta
+      </button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-bollettini" id="btn-tab-bollettini">
+        Bollettini
+      </button>
+    </div>
   </nav>
 
-  <main class="container">
+  <main id="top" class="container">
     <!-- ======================================================================
-         SCHEDA 1: Adesso — Sensori reali OMIRL, idrometri, rosa dei venti SVG & webcam
+         SCHEDA: Adesso
          ====================================================================== -->
-    <section id="tab-adesso" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-adesso">
+    <section id="tab-adesso" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-adesso" hidden>
       <div class="hero-adesso-grid">
-        <!-- Card Sinistra: Sintesi Fisica + 6 KPI Strumentali -->
         <article class="card">
           <div class="card-header">
-            <h2 class="card-title" id="hero-kpi-title">
-              <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M8 13V6"/>
-                <circle cx="8" cy="5" r="1.5"/>
-                <path d="M4.8 7.8a4.5 4.5 0 0 1 0-5.6M11.2 2.2a4.5 4.5 0 0 1 0 5.6"/>
-              </svg>
-              Quadro strumentale attuale sulla località selezionata
-            </h2>
+            <h2 class="card-title" id="hero-kpi-title">Riepilogo locale</h2>
             <button type="button" class="btn-action" onclick="window.switchTab('tab-mappa')">
-              <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <polygon points="1.5,3.5 5.8,2 10.2,3.5 14.5,2 14.5,12.5 10.2,14 5.8,12.5 1.5,14"/>
-              </svg>
-              Torna alla mappa live
+              Torna alla mappa
             </button>
           </div>
 
-          <div style="display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 1rem;">
+          <div class="hero-summary-row">
             <div>
               <div id="main-weather-desc" class="hero-weather-desc">--</div>
-              <div style="display: flex; align-items: baseline; gap: 0.85rem; margin-top: 0.15rem;">
-                <span id="main-temp" style="font-size: 2.55rem; font-weight: 600; line-height: 1;">--°C</span>
+              <div class="hero-temp-line">
+                <span id="main-temp" class="hero-temp-num">--°C</span>
                 <span id="main-wind-summary" class="hero-wind-summary">Vento: --</span>
               </div>
             </div>
-            <div style="text-align: right;">
-              <div id="pressure-value" style="font-size: 1rem; font-weight: 600;">---- hPa</div>
+            <div class="hero-pressure-col">
+              <div id="pressure-value" class="hero-pressure-num">---- hPa</div>
               <div id="pressure-trend" class="hero-pressure-trend">Tendenza barica 3h: --</div>
             </div>
           </div>
@@ -273,85 +200,51 @@
           </div>
         </article>
 
-        <!-- Card Destra: Quadrante Grafico SVG Rosa dei Venti Ligure + Vettore Swell + Cono Apertura Cala -->
         <article class="card compass-card">
           <div class="card-header">
-            <h2 class="card-title">
-              <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="8" cy="8" r="6"/>
-                <polygon points="10.2,5.8 8.8,9.2 5.8,10.2 7.2,6.8" fill="currentColor" stroke="none"/>
-              </svg>
-              Quadrante vettoriale vento, swell &amp; geometria rada
-            </h2>
-            <span class="badge-pill level-physics" id="compass-bay-badge">Rosa ligure</span>
+            <h2 class="card-title">Rosa dei venti e geometria rada</h2>
+            <span class="card-meta-note" id="compass-bay-badge">Rosa ligure</span>
           </div>
           <div id="svg-nautical-compass" class="svg-compass-container"></div>
           <div id="compass-legend" class="compass-legend-line"></div>
         </article>
       </div>
 
-      <!-- Stazioni Meteo/Marine Reali OMIRL + Idrometri Fluviali Reali con Barra Graduata -->
       <div class="dual-grid">
         <article class="card">
           <div class="card-header">
-            <h2 class="card-title">
-              <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M2 12.5h12"/>
-                <polyline points="2.5,10 6,6.5 9,8.5 13.5,3.5"/>
-              </svg>
-              Centraline reali OMIRL / ARPAL più vicine (dati al minuto)
-            </h2>
-            <span class="badge-pill level-physics">Verità osservativa</span>
+            <h2 class="card-title">Stazioni OMIRL vicine</h2>
+            <span class="card-meta-note">Dati misurati</span>
           </div>
           <div id="omirl-stations-grid" class="stations-grid"></div>
         </article>
 
         <article class="card">
           <div class="card-header">
-            <h2 class="card-title">
-              <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M3 2.5v11M3 5h2.5M3 8h3.5M3 11h2.5"/>
-                <path d="M7.5 11.5c1.2-1 2.4-1 3.6 0s2.4 1 3.4 0"/>
-              </svg>
-              Idrometri reali torrenti &amp; fiumi genovesi (livello vs soglie)
-            </h2>
-            <span class="badge-pill level-green">24 idrometri live</span>
+            <h2 class="card-title">Livelli idrometrici</h2>
+            <span class="card-meta-note">24 idrometri live</span>
           </div>
           <div id="omirl-hydrometers-grid" class="stations-grid"></div>
         </article>
       </div>
 
-      <!-- Galleria Webcam Live -->
       <article class="card">
         <div class="card-header">
-          <h2 class="card-title">
-            <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="2" y="4.5" width="12" height="8.5" rx="1.5"/>
-              <circle cx="8" cy="8.75" r="2.2"/>
-              <path d="M5.5 4.5L6.5 3h3l1 1.5"/>
-            </svg>
-            Occhio visivo sul territorio e sul mare — Webcam live &amp; orizzonte fisico
-          </h2>
-          <span class="card-meta-note">Immagine reale OMIRL e simulatore visivo stato mare/cielo in tempo reale</span>
+          <h2 class="card-title">Webcam e visuali costiere</h2>
+          <span class="card-meta-note">Rete osservativa OMIRL e portali locali</span>
         </div>
         <div id="live-webcams-grid" class="webcam-grid"></div>
       </article>
     </section>
 
     <!-- ======================================================================
-         SCHEDA 2: Nowcast 0-3h & fisica
+         SCHEDA: Nowcast 3h
          ====================================================================== -->
-    <section id="tab-nowcast" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-nowcast">
+    <section id="tab-nowcast" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-nowcast" hidden>
       <article class="card">
         <div class="card-header">
-          <h2 class="card-title">
-            <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="8" cy="8.5" r="5.5"/>
-              <path d="M8 5.5v3l2 1.5M6.5 1.5h3"/>
-            </svg>
-            Nowcasting ad alta risoluzione (prossime 3 ore — step 15 minuti)
-          </h2>
-          <span class="card-meta-note">Risoluzione convettiva 1.3 - 2.0 km (AROME HD + ICON-D2)</span>
+          <h2 class="card-title">Evoluzione a 3 ore (step 15 min)</h2>
+          <span class="card-meta-note">AROME HD 1.3 km + ICON-D2 2 km</span>
         </div>
         <div id="nowcast-15m-strip" class="nowcast-strip"></div>
       </article>
@@ -359,12 +252,7 @@
       <div class="dual-grid">
         <article class="card" id="panel-land-details">
           <div class="card-header">
-            <h2 class="card-title">
-              <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M1.5 13L6 4.5l3.5 5 2-2.5L14.5 13H1.5z"/>
-              </svg>
-              Fisica &amp; indicatori operativi Terra (bacini, viadotti, valichi &amp; maccaja)
-            </h2>
+            <h2 class="card-title">Indicatori operativi Terra</h2>
             <span id="land-overall-badge" class="badge-pill level-green">Regolare</span>
           </div>
           <div id="land-risk-items" class="risk-list"></div>
@@ -372,14 +260,8 @@
 
         <article class="card" id="panel-sea-details">
           <div class="card-header">
-            <h2 class="card-title">
-              <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M1.5 6.5c1.5-1.5 3-1.5 4.5 0s3 1.5 4.5 0 3-1.5 4.5 0"/>
-                <path d="M1.5 10.5c1.5-1.5 3-1.5 4.5 0s3 1.5 4.5 0 3-1.5 4.5 0"/>
-              </svg>
-              Strumentazione fisica &amp; oceanografica Mare (zero semafori soggettivi)
-            </h2>
-            <span id="sea-overall-badge" class="badge-pill level-physics">Fisica pura</span>
+            <h2 class="card-title">Fisica costiera e stato del mare</h2>
+            <span id="sea-overall-badge" class="card-meta-note">Parametri fisici</span>
           </div>
           <div id="sea-risk-items" class="risk-list"></div>
         </article>
@@ -387,60 +269,27 @@
     </section>
 
     <!-- ======================================================================
-         SCHEDA 3: Mappa operativa live full-canvas (predefinita all'avvio)
+         SCHEDA: Mappa (attiva all'avvio)
          ====================================================================== -->
     <section id="tab-mappa" class="tab-panel active" role="tabpanel" aria-labelledby="btn-tab-mappa">
       <article class="map-stage-card">
-        <!-- Controlli flottanti sopra la mappa -->
         <div class="map-floating-top">
           <div class="map-hint-chip">
-            <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="8" cy="8" r="5"/>
-              <circle cx="8" cy="8" r="1.5"/>
-              <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2"/>
-            </svg>
-            <span><strong>Clicca un comune, rada, stazione OMIRL o punto libero</strong> per aprire subito <strong>1. Adesso</strong></span>
+            <span><strong>Clicca un punto sulla mappa</strong> per aprire la scheda Adesso</span>
           </div>
           <div class="map-layers-pills">
-            <button id="btn-toggle-radar" type="button" class="map-pill active">
-              <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.5"/><path d="M8 8l4-4"/>
-              </svg>
-              Radar: ON
-            </button>
-            <button id="btn-toggle-omirl" type="button" class="map-pill active">
-              <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M2 6h8.5a2 2 0 1 0-2-2"/><path d="M2 10h10.5a2 2 0 1 1-2 2"/><path d="M2 8h6"/>
-              </svg>
-              Sensori OMIRL: ON
-            </button>
-            <button id="btn-toggle-webcams" type="button" class="map-pill active">
-              <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <rect x="2" y="4.5" width="12" height="8.5" rx="1.5"/><circle cx="8" cy="8.75" r="2.2"/><path d="M5.5 4.5L6.5 3h3l1 1.5"/>
-              </svg>
-              Webcam: ON
-            </button>
-            <button id="btn-toggle-amp" type="button" class="map-pill active">
-              <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="8" cy="3.5" r="1.5"/><path d="M8 5v8.5M5 7.5h6M3.5 10.5a4.5 4.5 0 0 0 9 0"/>
-              </svg>
-              Zone AMP: ON
-            </button>
+            <button id="btn-toggle-radar" type="button" class="map-pill active" aria-pressed="true">Radar: ON</button>
+            <button id="btn-toggle-omirl" type="button" class="map-pill active" aria-pressed="true">Sensori OMIRL: ON</button>
+            <button id="btn-toggle-webcams" type="button" class="map-pill active" aria-pressed="true">Webcam: ON</button>
+            <button id="btn-toggle-amp" type="button" class="map-pill active" aria-pressed="true">Zone AMP: ON</button>
           </div>
         </div>
 
-        <!-- Mappa interattiva full-canvas -->
         <div id="genova-map" role="application" aria-label="Mappa interattiva Provincia di Genova e Golfo Ligure"></div>
 
-        <!-- Player animazione radar flottante in basso -->
         <div class="map-floating-bottom">
-          <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <button id="btn-radar-play" type="button" class="btn-action">
-              <svg class="ui-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                <path d="M4.5 3.2L12.5 8l-8 4.8V3.2z"/>
-              </svg>
-              Play radar
-            </button>
+          <div class="radar-player-controls">
+            <button id="btn-radar-play" type="button" class="btn-action">Play radar</button>
             <span id="radar-time-label" class="radar-time-label">Radar live</span>
           </div>
           <input
@@ -452,29 +301,20 @@
             class="radar-slider"
             aria-label="Timeline frame radar precipitazioni"
           />
-          <span id="map-coords-label" class="map-coords-label">
-            <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="8" cy="8" r="4.5"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/>
-            </svg>
-            44.4072°N, 8.9339°E
-          </span>
+          <span id="map-coords-label" class="map-coords-label">44.4072°N, 8.9339°E</span>
         </div>
       </article>
     </section>
 
     <!-- ======================================================================
-         SCHEDA 4: Cinque modelli & 7 giorni
+         SCHEDA: Modelli
          ====================================================================== -->
-    <section id="tab-modelli" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-modelli">
+    <section id="tab-modelli" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-modelli" hidden>
       <div class="charts-grid">
         <article class="card">
           <div class="card-header">
-            <h2 class="card-title">
-              <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M2 13.5h12M4 11V7M8 11V4M12 11V5.5"/>
-              </svg>
-              Confronto multi-modello pioggia &amp; temperatura (AROME 1.3km vs ICON-D2 2km vs ECMWF)
-            </h2>
+            <h2 class="card-title">Meteogramma pioggia e temperatura</h2>
+            <span class="card-meta-note">AROME / ICON-D2 / ECMWF</span>
           </div>
           <div class="chart-wrapper">
             <canvas id="chart-multimodel"></canvas>
@@ -483,13 +323,8 @@
 
         <article class="card">
           <div class="card-header">
-            <h2 class="card-title">
-              <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M2 12.5h12"/>
-                <polyline points="2.5,10 6,6.5 9,8.5 13.5,3.5"/>
-              </svg>
-              Meteogramma vento (kt/km/h), raffiche &amp; onda significativa (Hs) / max (Hmax)
-            </h2>
+            <h2 class="card-title">Meteogramma vento e moto ondoso</h2>
+            <span class="card-meta-note">Vento, raffiche, Hs e Hmax</span>
           </div>
           <div class="chart-wrapper">
             <canvas id="chart-wind-wave"></canvas>
@@ -499,13 +334,8 @@
 
       <article class="card">
         <div class="card-header">
-          <h2 class="card-title">
-            <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M2.5 4h11M2.5 8h11M2.5 12h11M6 2.5v3M10.5 6.5v3M7.5 10.5v3"/>
-            </svg>
-            Ispettore trasparente ora-per-ora — Tutti i 5 modelli fianco a fianco (prossime 24h)
-          </h2>
-          <span class="badge-pill level-physics">AROME 1.3km • ICON-D2 2km • ECMWF 9km • GFS • MET Norway</span>
+          <h2 class="card-title">Confronto orario 5 modelli (24h)</h2>
+          <span class="card-meta-note">AROME 1.3km • ICON-D2 2km • ECMWF 9km • GFS • MET.no</span>
         </div>
         <div class="table-responsive">
           <table class="forecast-table">
@@ -531,14 +361,8 @@
 
       <article class="card">
         <div class="card-header">
-          <h2 class="card-title">
-            <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="2" y="3" width="12" height="11" rx="1.2"/>
-              <path d="M5 1.5v3M11 1.5v3M2 6.5h12"/>
-            </svg>
-            Tendenza a 7 giorni — Provincia di Genova (Terra &amp; fisica mare)
-          </h2>
-          <span class="card-meta-note">Ensemble pesato 5 modelli + Open-Meteo Marine</span>
+          <h2 class="card-title">Previsione a 7 giorni</h2>
+          <span class="card-meta-note">Ensemble 5 modelli + Open-Meteo Marine</span>
         </div>
         <div class="table-responsive">
           <table class="forecast-table">
@@ -560,59 +384,44 @@
     </section>
 
     <!-- ======================================================================
-         SCHEDA 5: Rotta costiera & ETA
+         SCHEDA: Rotta
          ====================================================================== -->
-    <section id="tab-rotta" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-rotta">
+    <section id="tab-rotta" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-rotta" hidden>
       <article class="card">
         <div class="card-header">
           <div>
-            <h2 class="card-title">
-              <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="8" cy="8" r="6"/>
-                <polygon points="10.2,5.8 8.8,9.2 5.8,10.2 7.2,6.8" fill="currentColor" stroke="none"/>
-              </svg>
-              Calcolatore pubblico di rotta costiera, ETA, limiti AMP Portofino &amp; turnaround time
-            </h2>
+            <h2 class="card-title">Pianificatore di rotta costiera</h2>
             <p class="card-subtitle">
-              Grafo nautico costiero che non taglia mai via terra i promontori e applica i limiti di velocità dell'Area Marina Protetta di Portofino (Zona A vietata, Zona B max 5 kt, Zona C max 7 kt).
+              Grafo nautico costiero con limiti di velocità dell'Area Marina Protetta di Portofino (Zona A vietata, Zona B 5 kt, Zona C 7 kt).
             </p>
           </div>
-          <a href="/orologio" class="btn-action">
-            <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="4" y="3.5" width="8" height="9" rx="1.5"/>
-              <path d="M5.5 1.5h5M5.5 14.5h5M8 6.5V8l1.2 1"/>
-            </svg>
-            Apri HUD smartwatch (/orologio)
-          </a>
+          <a href="/orologio" class="btn-action">Apri orologio (/orologio)</a>
         </div>
 
         <div class="route-form-grid">
           <div class="form-field">
-            <label for="route-origin">Porto / cala di partenza</label>
+            <label for="route-origin">Partenza</label>
             <select id="route-origin" class="form-input"></select>
           </div>
           <div class="form-field">
-            <label for="route-dest">Cala / porto di destinazione</label>
+            <label for="route-dest">Destinazione</label>
             <select id="route-dest" class="form-input"></select>
           </div>
           <div class="form-field">
-            <label for="route-speed">Velocità crociera (nodi kt)</label>
+            <label for="route-speed">Velocità crociera (kt)</label>
             <input id="route-speed" type="number" min="1" max="40" step="0.5" value="6.0" class="form-input" />
           </div>
           <div class="form-field">
-            <label for="route-duration">Durata totale uscita (min)</label>
+            <label for="route-duration">Durata uscita (min)</label>
             <input id="route-duration" type="number" min="20" max="600" step="10" value="90" class="form-input" />
           </div>
           <div class="form-field">
-            <label for="route-stop">Sosta / bagno in cala (min)</label>
+            <label for="route-stop">Sosta in cala (min)</label>
             <input id="route-stop" type="number" min="0" max="240" step="5" value="20" class="form-input" />
           </div>
           <div class="form-field">
-            <button id="btn-calc-route" type="button" class="btn-action" style="justify-content: center;">
-              <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="8" cy="3.5" r="1.5"/><path d="M8 5v8.5M5 7.5h6M3.5 10.5a4.5 4.5 0 0 0 9 0"/>
-              </svg>
-              Calcola piano rotta &amp; ETA
+            <button id="btn-calc-route" type="button" class="btn-action btn-primary-action">
+              Calcola rotta ed ETA
             </button>
           </div>
         </div>
@@ -623,18 +432,13 @@
     </section>
 
     <!-- ======================================================================
-         SCHEDA 6: Bollettini & analisi AI
+         SCHEDA: Bollettini
          ====================================================================== -->
-    <section id="tab-bollettini" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-bollettini">
-      <article class="card ai-card">
+    <section id="tab-bollettini" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-bollettini" hidden>
+      <article class="card">
         <div class="card-header">
-          <h2 class="card-title">
-            <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M8 2v12M2 8h12M4.2 4.2l7.6 7.6M11.8 4.2l-7.6 7.6"/>
-            </svg>
-            Analista sinottico puro &amp; AI Meteo-Marine Advisor (spiegazione fisica)
-          </h2>
-          <span id="ai-engine-badge" class="badge-pill level-green">Motore sinottico ligure</span>
+          <h2 class="card-title">Analisi sinottica</h2>
+          <span id="ai-engine-badge" class="card-meta-note">Motore sinottico ligure</span>
         </div>
         <h3 id="ai-headline" class="ai-headline">--</h3>
         <p id="ai-synoptic-body" class="pretty-copy ai-synoptic-body"></p>
@@ -644,37 +448,24 @@
       <div class="dual-grid">
         <article class="card">
           <div class="card-header">
-            <h2 class="card-title">
-              <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <rect x="3" y="2" width="10" height="12" rx="1.2"/>
-                <path d="M5.5 5.5h5M5.5 8.5h5M5.5 11.5h3"/>
-              </svg>
-              Bollettino vigilanza &amp; previsione ufficiale ARPAL Liguria
-            </h2>
-            <span id="arpal-issued-badge" class="badge-pill level-physics">ARPAL</span>
+            <h2 class="card-title">Bollettino ARPAL Liguria</h2>
+            <span id="arpal-issued-badge" class="card-meta-note">ARPAL</span>
           </div>
           <div id="arpal-bulletin-box" class="risk-list"></div>
         </article>
 
         <article class="card">
           <div class="card-header">
-            <h2 class="card-title">
-              <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M8 13V6"/>
-                <circle cx="8" cy="5" r="1.5"/>
-                <path d="M4.8 7.8a4.5 4.5 0 0 1 0-5.6M11.2 2.2a4.5 4.5 0 0 1 0 5.6"/>
-              </svg>
-              Bollettino fisico METEOMAR — Settore Mar Ligure &amp; contatti Guardia Costiera
-            </h2>
-            <span class="badge-pill level-physics">Canale 16 VHF / 1530</span>
+            <h2 class="card-title">Meteomar Mar Ligure e soccorso</h2>
+            <span class="card-meta-note">VHF Ch 16 / 1530</span>
           </div>
           <div class="risk-list">
             <div class="risk-item border-physics">
-              <div class="risk-item-title">Testo integrale stile METEOMAR Mar Ligure</div>
+              <div class="risk-item-title">Testo integrale Meteomar Mar Ligure</div>
               <div id="meteomar-text" class="risk-item-desc">--</div>
             </div>
             <div class="risk-item border-green">
-              <div class="risk-item-title">Contatti ufficiali soccorso in mare (SAR)</div>
+              <div class="risk-item-title">Contatti ufficiali soccorso in mare</div>
               <div class="risk-item-desc">
                 • <strong>Guardia Costiera Emergenza:</strong> 1530 (Numero Blu gratuito)<br>
                 • <strong>Ascolto Radio Nautico:</strong> Canale 16 VHF (156.8 MHz)<br>
@@ -695,6 +486,6 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-  <script src="/static/app.js?v=2.5"></script>
+  <script src="/static/app.js?v=2.6"></script>
 </body>
 </html>

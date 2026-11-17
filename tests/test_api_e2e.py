@@ -25,6 +25,9 @@ def test_pwa_root_6tabs_and_smartwatch_view() -> None:
     assert 'class="telemetry-hud"' in r_index.text
     assert 'id="svg-nautical-compass"' in r_index.text
     assert 'class="map-floating-top"' in r_index.text
+    assert 'id="loc-picker-btn"' in r_index.text
+    assert 'role="toolbar"' in r_index.text
+    assert "Verità osservativa" not in r_index.text
 
     r_watch = client.get("/orologio")
     assert r_watch.status_code == 200

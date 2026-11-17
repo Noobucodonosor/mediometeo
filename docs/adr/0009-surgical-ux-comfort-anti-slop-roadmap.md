@@ -42,7 +42,7 @@ Dopo l'introduzione della palette `blue-black-cornflower` e dei font `IBM Plex S
 
 ## 3. Roadmap Sequenziale su GitHub (Milestone `v3.0 — Surgical UX Comfort & Anti-Slop`)
 
-- [ ] **TASK-UX-04** (`#16`, P0): **Shell, Topbar, HUD & Navigazione — Pulizia Cognitiva, Ricerca Unificata e Rimozione Ridondanze**
+- [x] **TASK-UX-04** (`#16`, P0): **Shell, Topbar, HUD & Navigazione — Pulizia Cognitiva, Ricerca Unificata e Rimozione Ridondanze**
 - [ ] **TASK-UX-05** (`#17`, P1): **Schermata Mappa (`#tab-mappa`) — Decluttering Cartografico e Selettore Layer Singolo**
 - [ ] **TASK-UX-06** (`#18`, P1): **Schermata Adesso (`#tab-adesso`) — Zero Duplicati HUD, Liste Tabellari `1px` e Rimozione Finte Webcam SVG**
 - [ ] **TASK-UX-07** (`#19`, P1): **Schermata Nowcast 3h (`#tab-nowcast`) — Coerenza Modalità Terra/Mare e Righe Strumentali al Posto dei Muri di Testo**

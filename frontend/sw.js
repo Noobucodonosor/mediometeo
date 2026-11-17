@@ -1,9 +1,9 @@
-const CACHE_NAME = "mediometeo-genova-v2.5";
+const CACHE_NAME = "mediometeo-genova-v2.6";
 const LEGACY_TAG = "mediometeo-genova-v1";
 const STATIC_ASSETS = [
   "/",
-  "/static/styles.css?v=2.5",
-  "/static/app.js?v=2.5",
+  "/static/styles.css?v=2.6",
+  "/static/app.js?v=2.6",
   "/manifest.json"
 ];
 

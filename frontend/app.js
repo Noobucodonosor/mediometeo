@@ -79,13 +79,28 @@ function setBadgeLevel(el, level, text) {
 
 window.switchTab = function switchTab(tabId) {
   state.activeTab = tabId;
+  const hasNativeFocusGroup = "focusGroup" in HTMLElement.prototype;
+
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     const isTarget = btn.getAttribute("data-tab") === tabId;
     btn.classList.toggle("active", isTarget);
     btn.setAttribute("aria-selected", isTarget ? "true" : "false");
+    btn.toggleAttribute("focusgroupstart", isTarget);
+    if (!hasNativeFocusGroup) {
+      btn.tabIndex = isTarget ? 0 : -1;
+    }
+    if (isTarget && typeof btn.scrollIntoView === "function") {
+      try {
+        btn.scrollIntoView({ block: "nearest", inline: "nearest", container: "nearest" });
+      } catch (_) {
+        btn.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+    }
   });
   document.querySelectorAll(".tab-panel").forEach((panel) => {
-    panel.classList.toggle("active", panel.id === tabId);
+    const isTarget = panel.id === tabId;
+    panel.classList.toggle("active", isTarget);
+    panel.hidden = !isTarget;
   });
 
   if (tabId === "tab-mappa" && state.map) {
@@ -96,7 +111,88 @@ window.switchTab = function switchTab(tabId) {
   }
 };
 
+function initAccessibilityFallbacks() {
+  const hasNativeFocusGroup = "focusGroup" in HTMLElement.prototype;
+
+  // Roving tabindex fallback for [role="tablist"] when browser lacks native focusgroup
+  const tablist = document.querySelector('[role="tablist"]');
+  if (tablist && !hasNativeFocusGroup) {
+    const tabs = Array.from(tablist.querySelectorAll('[role="tab"]'));
+    tabs.forEach((t) => {
+      t.tabIndex = t.getAttribute("aria-selected") === "true" ? 0 : -1;
+    });
+    tablist.addEventListener("keydown", (ev) => {
+      const idx = tabs.indexOf(document.activeElement);
+      if (idx === -1) return;
+      let nextIdx = -1;
+      if (ev.key === "ArrowRight") nextIdx = (idx + 1) % tabs.length;
+      else if (ev.key === "ArrowLeft") nextIdx = (idx - 1 + tabs.length) % tabs.length;
+      else if (ev.key === "Home") nextIdx = 0;
+      else if (ev.key === "End") nextIdx = tabs.length - 1;
+      if (nextIdx >= 0) {
+        ev.preventDefault();
+        const nextTab = tabs[nextIdx];
+        nextTab.focus();
+        window.switchTab(nextTab.getAttribute("data-tab"));
+      }
+    });
+  }
+
+  // Roving tabindex fallback for [role="toolbar"]
+  const toolbar = document.querySelector('[role="toolbar"]');
+  if (toolbar && !hasNativeFocusGroup) {
+    const items = Array.from(toolbar.querySelectorAll("button, a[href]"));
+    items.forEach((el, i) => {
+      el.tabIndex = i === 0 ? 0 : -1;
+    });
+    toolbar.addEventListener("focusin", (ev) => {
+      if (items.includes(ev.target)) {
+        items.forEach((el) => {
+          el.tabIndex = el === ev.target ? 0 : -1;
+        });
+      }
+    });
+    toolbar.addEventListener("keydown", (ev) => {
+      const idx = items.indexOf(document.activeElement);
+      if (idx === -1) return;
+      let nextIdx = -1;
+      if (ev.key === "ArrowRight") nextIdx = (idx + 1) % items.length;
+      else if (ev.key === "ArrowLeft") nextIdx = (idx - 1 + items.length) % items.length;
+      else if (ev.key === "Home") nextIdx = 0;
+      else if (ev.key === "End") nextIdx = items.length - 1;
+      if (nextIdx >= 0) {
+        ev.preventDefault();
+        items[nextIdx].focus();
+      }
+    });
+  }
+
+  // IntersectionObserver horizontal fade fallback when scroll-driven animations are absent
+  if (typeof CSS !== "undefined" && !CSS.supports("animation-timeline", "scroll()")) {
+    document.querySelectorAll(".tabs-nav.scroller").forEach((scroller) => {
+      const first = scroller.firstElementChild;
+      const last = scroller.lastElementChild;
+      if (!first || !last) return;
+      const obs = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.target === first) {
+              scroller.classList.toggle("more-start", entry.intersectionRatio < 1);
+            } else if (entry.target === last) {
+              scroller.classList.toggle("more-end", entry.intersectionRatio < 1);
+            }
+          });
+        },
+        { root: scroller, threshold: 1, rootMargin: "1px" }
+      );
+      obs.observe(first);
+      obs.observe(last);
+    });
+  }
+}
+
 async function initApp() {
+  initAccessibilityFallbacks();
   bindUIEvents();
   await loadLocationsCatalog();
   initLeafletMap();
@@ -108,7 +204,7 @@ async function initApp() {
       .getRegistrations()
       .then((regs) => regs.forEach((r) => r.update().catch(() => {})))
       .catch(() => {});
-    navigator.serviceWorker.register("/sw.js?v=2.5").catch(() => {});
+    navigator.serviceWorker.register("/sw.js?v=2.6").catch(() => {});
   }
 }
 
@@ -125,20 +221,85 @@ function bindUIEvents() {
   document.getElementById("btn-mode-land").addEventListener("click", () => switchMode("land"));
   document.getElementById("btn-mode-sea").addEventListener("click", () => switchMode("sea"));
 
-  // Filtri e ricerca 118 località
+  // Filtri e ricerca unificata 118 località (Popover combobox + select nascosti sincronizzati)
+  const pickerBtn = document.getElementById("loc-picker-btn");
+  const pickerPanel = document.getElementById("loc-picker-panel");
   const typeFilter = document.getElementById("loc-type-filter");
   const searchInput = document.getElementById("loc-search-input");
   const selectLoc = document.getElementById("district-select");
+  const chipButtons = document.querySelectorAll(".loc-chip");
 
-  typeFilter.addEventListener("change", () => {
-    populateLocationSelect();
-    renderLocationsOnMap();
-  });
-  searchInput.addEventListener("input", () => populateLocationSelect());
+  function setPickerOpen(open) {
+    if (!pickerBtn || !pickerPanel) return;
+    pickerPanel.hidden = !open;
+    pickerBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open && searchInput) {
+      setTimeout(() => searchInput.focus(), 20);
+    }
+  }
 
-  selectLoc.addEventListener("change", async (e) => {
-    await selectLocationById(e.target.value, false);
+  window.__closeLocPicker = () => setPickerOpen(false);
+
+  if (pickerBtn && pickerPanel) {
+    pickerBtn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      setPickerOpen(pickerPanel.hidden);
+    });
+
+    document.addEventListener("pointerdown", (ev) => {
+      if (!pickerPanel.hidden && !pickerPanel.contains(ev.target) && !pickerBtn.contains(ev.target)) {
+        setPickerOpen(false);
+      }
+    });
+
+    pickerPanel.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        setPickerOpen(false);
+        pickerBtn.focus();
+      }
+    });
+  }
+
+  chipButtons.forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const val = chip.getAttribute("data-loc-type") || "";
+      chipButtons.forEach((c) => c.setAttribute("aria-pressed", c === chip ? "true" : "false"));
+      if (typeFilter) typeFilter.value = val;
+      populateLocationSelect();
+      renderLocationsOnMap();
+    });
   });
+
+  if (typeFilter) {
+    typeFilter.addEventListener("change", () => {
+      populateLocationSelect();
+      renderLocationsOnMap();
+    });
+  }
+
+  if (searchInput) {
+    searchInput.addEventListener("input", () => populateLocationSelect());
+    searchInput.addEventListener("keydown", async (ev) => {
+      if (ev.key === "Enter" && state.filteredLocations.length > 0) {
+        ev.preventDefault();
+        await selectLocationById(state.filteredLocations[0].id, false);
+        setPickerOpen(false);
+      } else if (ev.key === "ArrowDown") {
+        const firstOpt = document.querySelector("#loc-picker-list .loc-option");
+        if (firstOpt) {
+          ev.preventDefault();
+          firstOpt.focus();
+        }
+      }
+    });
+  }
+
+  if (selectLoc) {
+    selectLoc.addEventListener("change", async (e) => {
+      await selectLocationById(e.target.value, false);
+    });
+  }
 
   // GPS Button
   document.getElementById("btn-gps").addEventListener("click", () => {
@@ -165,32 +326,36 @@ function bindUIEvents() {
     await refreshAllData(true);
   });
 
-  // Map Layer Toggles (Floating Pills)
+  // Map Layer Toggles
   document.getElementById("btn-toggle-radar").addEventListener("click", (e) => {
     state.radarVisible = !state.radarVisible;
     e.currentTarget.classList.toggle("active", state.radarVisible);
-    e.currentTarget.innerHTML = `${SVG_ICONS.radar} Radar: ${state.radarVisible ? "ON" : "OFF"}`;
+    e.currentTarget.setAttribute("aria-pressed", state.radarVisible ? "true" : "false");
+    e.currentTarget.textContent = `Radar: ${state.radarVisible ? "ON" : "OFF"}`;
     updateRadarLayer();
   });
 
   document.getElementById("btn-toggle-omirl").addEventListener("click", (e) => {
     state.omirlVisible = !state.omirlVisible;
     e.currentTarget.classList.toggle("active", state.omirlVisible);
-    e.currentTarget.innerHTML = `${SVG_ICONS.wind} Sensori OMIRL: ${state.omirlVisible ? "ON" : "OFF"}`;
+    e.currentTarget.setAttribute("aria-pressed", state.omirlVisible ? "true" : "false");
+    e.currentTarget.textContent = `Sensori OMIRL: ${state.omirlVisible ? "ON" : "OFF"}`;
     renderMapOverlays();
   });
 
   document.getElementById("btn-toggle-webcams").addEventListener("click", (e) => {
     state.webcamsVisible = !state.webcamsVisible;
     e.currentTarget.classList.toggle("active", state.webcamsVisible);
-    e.currentTarget.innerHTML = `${SVG_ICONS.camera} Webcam: ${state.webcamsVisible ? "ON" : "OFF"}`;
+    e.currentTarget.setAttribute("aria-pressed", state.webcamsVisible ? "true" : "false");
+    e.currentTarget.textContent = `Webcam: ${state.webcamsVisible ? "ON" : "OFF"}`;
     renderMapOverlays();
   });
 
   document.getElementById("btn-toggle-amp").addEventListener("click", (e) => {
     state.ampVisible = !state.ampVisible;
     e.currentTarget.classList.toggle("active", state.ampVisible);
-    e.currentTarget.innerHTML = `${SVG_ICONS.anchor} Zone AMP: ${state.ampVisible ? "ON" : "OFF"}`;
+    e.currentTarget.setAttribute("aria-pressed", state.ampVisible ? "true" : "false");
+    e.currentTarget.textContent = `Zone AMP: ${state.ampVisible ? "ON" : "OFF"}`;
     renderMapOverlays();
   });
 
@@ -236,13 +401,32 @@ async function selectLocationById(locId, autoSwitchToAdesso = false) {
 function updateModeButtonsUI() {
   const btnLand = document.getElementById("btn-mode-land");
   const btnSea = document.getElementById("btn-mode-sea");
-  if (state.mode === "land") {
-    btnLand.className = "mode-btn active-land";
-    btnSea.className = "mode-btn";
-  } else {
-    btnLand.className = "mode-btn";
-    btnSea.className = "mode-btn active-sea";
+  const isLand = state.mode === "land";
+  btnLand.className = isLand ? "mode-btn active-land" : "mode-btn";
+  btnSea.className = isLand ? "mode-btn" : "mode-btn active-sea";
+  btnLand.setAttribute("aria-pressed", isLand ? "true" : "false");
+  btnSea.setAttribute("aria-pressed", isLand ? "false" : "true");
+}
+
+function updateLocationPickerTrigger(loc, coords) {
+  const lbl = document.getElementById("loc-picker-label");
+  const meta = document.getElementById("loc-picker-meta");
+  if (!lbl || !meta) return;
+
+  if (coords && coords.is_custom_pin) {
+    lbl.textContent = loc?.name ? `Presso ${loc.name}` : "Punto su mappa";
+    meta.textContent = `${coords.lat.toFixed(2)}°N, ${coords.lon.toFixed(2)}°E`;
+    return;
   }
+
+  const typeNames = {
+    comune: "Comune",
+    quartiere: "Quartiere",
+    rada_porto: "Rada",
+    valico: "Valico",
+  };
+  lbl.textContent = loc?.name || "Genova";
+  meta.textContent = typeNames[loc?.loc_type] || loc?.valley_or_sector || "Genova";
 }
 
 async function switchMode(targetMode) {
@@ -274,8 +458,9 @@ async function loadLocationsCatalog() {
 
 function populateLocationSelect() {
   const select = document.getElementById("district-select");
-  const typeFilter = document.getElementById("loc-type-filter").value;
-  const query = (document.getElementById("loc-search-input").value || "").trim().toLowerCase();
+  const listEl = document.getElementById("loc-picker-list");
+  const typeFilter = document.getElementById("loc-type-filter")?.value || "";
+  const query = (document.getElementById("loc-search-input")?.value || "").trim().toLowerCase();
 
   const filtered = state.locations.filter((loc) => {
     if (typeFilter && loc.loc_type !== typeFilter) return false;
@@ -290,13 +475,21 @@ function populateLocationSelect() {
   });
 
   state.filteredLocations = filtered;
-  select.innerHTML = "";
+  if (select) select.innerHTML = "";
+  if (listEl) listEl.innerHTML = "";
+
+  const groupsMeta = {
+    comune: "67 Comuni — Città Metropolitana",
+    quartiere: "25 Quartieri / Municipi",
+    rada_porto: "20 Rade, porti e capi",
+    valico: "6 Valichi appenninici",
+  };
 
   const groups = {
-    comune: { label: "67 Comuni — Città Metropolitana di Genova", el: document.createElement("optgroup") },
-    quartiere: { label: "25 Quartieri / Municipi di Genova", el: document.createElement("optgroup") },
-    rada_porto: { label: "20 Rade, porti, cale & capi (Golfo Ligure)", el: document.createElement("optgroup") },
-    valico: { label: "6 Valichi appenninici & autostradali", el: document.createElement("optgroup") },
+    comune: { label: groupsMeta.comune, el: document.createElement("optgroup"), items: [] },
+    quartiere: { label: groupsMeta.quartiere, el: document.createElement("optgroup"), items: [] },
+    rada_porto: { label: groupsMeta.rada_porto, el: document.createElement("optgroup"), items: [] },
+    valico: { label: groupsMeta.valico, el: document.createElement("optgroup"), items: [] },
   };
 
   Object.values(groups).forEach((g) => {
@@ -311,25 +504,67 @@ function populateLocationSelect() {
   };
 
   filtered.forEach((loc) => {
-    const opt = document.createElement("option");
-    opt.value = loc.id;
     const code = codeMap[loc.loc_type] || "GE";
-    opt.textContent = `[${code}] ${loc.name} (${loc.valley_or_sector})`;
+    if (select) {
+      const opt = document.createElement("option");
+      opt.value = loc.id;
+      opt.textContent = `[${code}] ${loc.name} (${loc.valley_or_sector})`;
+      if (groups[loc.loc_type]) {
+        groups[loc.loc_type].el.appendChild(opt);
+      }
+    }
     if (groups[loc.loc_type]) {
-      groups[loc.loc_type].el.appendChild(opt);
+      groups[loc.loc_type].items.push(loc);
     }
   });
 
   Object.values(groups).forEach((g) => {
-    if (g.el.children.length > 0) {
+    if (select && g.el.children.length > 0) {
       select.appendChild(g.el);
+    }
+    if (listEl && g.items.length > 0) {
+      const head = document.createElement("div");
+      head.className = "loc-group-head";
+      head.textContent = g.label;
+      listEl.appendChild(head);
+
+      g.items.forEach((loc) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "loc-option";
+        btn.setAttribute("role", "option");
+        btn.setAttribute("aria-selected", loc.id === state.selectedLocationId ? "true" : "false");
+
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = loc.name;
+        const sectorSpan = document.createElement("span");
+        sectorSpan.className = "loc-option-sector";
+        sectorSpan.textContent = loc.valley_or_sector;
+
+        btn.appendChild(nameSpan);
+        btn.appendChild(sectorSpan);
+        btn.addEventListener("click", async () => {
+          await selectLocationById(loc.id, false);
+          if (typeof window.__closeLocPicker === "function") window.__closeLocPicker();
+        });
+        listEl.appendChild(btn);
+      });
     }
   });
 
-  if (filtered.some((l) => l.id === state.selectedLocationId)) {
-    select.value = state.selectedLocationId;
-  } else if (filtered.length > 0) {
-    select.value = filtered[0].id;
+  if (listEl && filtered.length === 0) {
+    const emptyEl = document.createElement("div");
+    emptyEl.className = "loc-picker-empty";
+    emptyEl.textContent = "Nessuna località trovata per questo filtro.";
+    listEl.appendChild(emptyEl);
+  }
+
+  if (select) {
+    if (filtered.some((l) => l.id === state.selectedLocationId)) {
+      select.value = state.selectedLocationId;
+    } else if (filtered.length > 0) {
+      select.value = filtered[0].id;
+    }
   }
 }
 
@@ -717,7 +952,7 @@ function toggleRadarAnimation() {
 
   state.radarPlaying = !state.radarPlaying;
   if (state.radarPlaying) {
-    btn.innerHTML = `${SVG_ICONS.pause} Pausa radar`;
+    btn.textContent = "Pausa radar";
     state.radarTimer = setInterval(() => {
       state.radarFrameIndex = (state.radarFrameIndex + 1) % frames.length;
       const slider = document.getElementById("radar-frame-slider");
@@ -725,7 +960,7 @@ function toggleRadarAnimation() {
       updateRadarLayer();
     }, 850);
   } else {
-    btn.innerHTML = `${SVG_ICONS.play} Play radar`;
+    btn.textContent = "Play radar";
     if (state.radarTimer) {
       clearInterval(state.radarTimer);
       state.radarTimer = null;
@@ -832,6 +1067,7 @@ function renderDashboard() {
   const thermo = landRisk.thermo_comfort || {};
 
   // 1. Striscia di Telemetria Sempre Visibile ("Always-On Telemetry HUD")
+  updateLocationPickerTrigger(loc, pkg.coordinates);
   const pinSuffix = pkg.coordinates.is_custom_pin
     ? ` (${pkg.coordinates.lat.toFixed(4)}°N, ${pkg.coordinates.lon.toFixed(4)}°E)`
     : "";
@@ -854,6 +1090,9 @@ function renderDashboard() {
   }
   document.getElementById("banner-microclimate").textContent =
     loc.shelter_notes || d.microclimate_notes;
+
+  // Refresh selected option state in unified picker
+  populateLocationSelect();
 
   // Popolamento dei 5 Numeri Chiave dell'HUD
   const hudTemp = document.getElementById("hud-val-temp");
@@ -936,11 +1175,11 @@ function renderDashboard() {
   document.getElementById("pressure-trend").textContent = cur.pressure_trend_label;
   document.getElementById(
     "wind-local-note"
-  ).innerHTML = `${SVG_ICONS.compass}<span><strong>Rosa dei venti ligure (${wind.ligurian_name} — ${wind.cardinal}):</strong> ${wind.local_note}</span>`;
+  ).innerHTML = `<span><strong>Rosa dei venti ligure (${wind.ligurian_name} — ${wind.cardinal}):</strong> ${wind.local_note}</span>`;
 
   document.getElementById(
     "map-coords-label"
-  ).innerHTML = `${SVG_ICONS.pin} ${pkg.coordinates.lat.toFixed(4)}°N, ${pkg.coordinates.lon.toFixed(4)}°E`;
+  ).textContent = `${pkg.coordinates.lat.toFixed(4)}°N, ${pkg.coordinates.lon.toFixed(4)}°E`;
 
   renderDynamicKPIs(cur, landRisk, seaCond);
   renderNauticalCompassSVG(cur, seaCond, loc);
