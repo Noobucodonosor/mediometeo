@@ -1,5 +1,9 @@
 # MedioMeteo Genova
 
+[![Anteprima MedioMeteo Genova — Terra & Mare](./docs/preview/social-preview.png)](https://mediometeo-664856461640.europe-west1.run.app)
+
+**Demo Live (Cloud Run):** [https://mediometeo-664856461640.europe-west1.run.app](https://mediometeo-664856461640.europe-west1.run.app)
+
 Piattaforma full-stack di **Nowcasting (0–3h)** e **Forecasting (7 giorni)** ad alta risoluzione per la **Città Metropolitana di Genova (67 comuni, Terra)** e il **Golfo Ligure (Mare)**, sviluppata con metodologia **ADR-Driven**.
 
 ## Funzionalità Principali
