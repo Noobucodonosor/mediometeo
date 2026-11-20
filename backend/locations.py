@@ -195,7 +195,7 @@ _RAW_VALICHI_6: list[tuple[str, float, float, int, str, str]] = [
 ]
 
 
-# Poligoni ufficiali dell'Area Marina Protetta (AMP) di Portofino (ORO-6 da /Users/dany/meteo)
+# Poligoni ufficiali dell'Area Marina Protetta (AMP) di Portofino (ORO-6)
 AMP_PORTOFINO_ZONES: list[dict[str, Any]] = [
     {
         "id": "AMP-ZONA-A",

@@ -4,7 +4,7 @@
 - **Priorità:** P0 — Critica (Qualità UX, Comfort Cognitivo & Credibilità Strumentale)
 - **Data:** 2026-11-17
 - **Autori:** Daniele (`@Noobucodonosor`) & Antigravity AI
-- **Fonti:** Audit critico post-`v2.5`, [`design-taste-frontend` (`taste-skill 2.5.1`)](file:///Users/dany/.gemini/config/skills/design-taste-frontend/SKILL.md), [`ADR-0006`](./0006-pure-marine-physics-6tabs-eta-smartwatch.md), [`ADR-0008`](./0008-taste-skill-anti-slop-full-omirl-fusion.md), Milestone GitHub `#1` (`v3.0 — Surgical UX Comfort & Anti-Slop`)
+- **Fonti:** Audit critico post-`v2.5`, `design-taste-frontend` (`taste-skill 2.5.1`), [`ADR-0006`](./0006-pure-marine-physics-6tabs-eta-smartwatch.md), [`ADR-0008`](./0008-taste-skill-anti-slop-full-omirl-fusion.md), Milestone GitHub `#1` (`v3.0 — Surgical UX Comfort & Anti-Slop`)
 
 ---
 
