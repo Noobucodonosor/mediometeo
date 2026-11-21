@@ -546,7 +546,7 @@ function renderSheet() {
 
     const cards = isSea
       ? [
-          { hero: true, icon: weatherIconSvg("mare"), label: "Onda", value: `${waves.significant_height_m} m`, sub: `${waves.douglas.label} · Tp ${waves.peak_period_s}s` },
+          { hero: true, icon: weatherIconSvg(cur.weather_description), label: "Onda", value: `${waves.significant_height_m} m`, sub: `${waves.douglas.label} · Tp ${waves.peak_period_s}s` },
           { label: "Vento", value: `${wind.speed_knots} kt`, sub: `Raffica ${wind.gust_knots} kt · ${wind.ligurian_name}` },
           { label: "Risacca", value: `${cp.bay_surge.shore_breaker_height_m} m`, sub: `Marea ${cp.tides.current_height_cm}cm` },
         ]

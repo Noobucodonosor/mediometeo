@@ -82,7 +82,7 @@ html, body {
   position: absolute;
   top: 14px;
   left: 14px;
-  z-index: 900;
+  z-index: 930;
   width: min(360px, calc(100vw - 92px));
   display: flex;
   flex-direction: column;
@@ -667,6 +667,7 @@ html, body {
 .exp-grid-2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: 0.9rem;
 }
 .obs-list, .arpal-list {
