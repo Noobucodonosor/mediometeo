@@ -1732,6 +1732,17 @@ function renderLandAndSeaPanels(landRisk, seaCond, conv) {
   );
 
   // Pannello Terra: Fisica + Indicatori Operativi
+  const landPanel = document.getElementById("panel-land-details");
+  const seaPanel = document.getElementById("panel-sea-details");
+  if (landPanel && seaPanel) {
+    const isSea = state.mode === "sea";
+    landPanel.hidden = isSea;
+    seaPanel.hidden = !isSea;
+    if (landPanel.parentElement) {
+      landPanel.parentElement.style.gridTemplateColumns = "1fr";
+    }
+  }
+
   const landContainer = document.getElementById("land-risk-items");
   const thermo = landRisk.thermo_comfort || {};
   const convBorder =
