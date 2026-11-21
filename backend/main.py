@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
+import logging
 from pathlib import Path
 from typing import Any
 
+import httpx
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -41,6 +44,19 @@ from backend.security import (
 )
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+logger = logging.getLogger("mediometeo")
+
+
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    settings = get_settings()
+    app_instance.state.cache = SQLiteCache(settings.db_path)
+    app_instance.state.http_client = httpx.AsyncClient(timeout=8.0)
+    try:
+        yield
+    finally:
+        await app_instance.state.http_client.aclose()
+
 
 app = FastAPI(
     title="MedioMeteo Genova — Forecast & Nowcast Terra/Mare",
@@ -50,6 +66,7 @@ app = FastAPI(
         "Fisica Costiera Pura e Calcolatore Rotta ETA per i 67 Comuni della Città Metropolitana di Genova e il Golfo Ligure."
     ),
     version="2.0.0",
+    lifespan=lifespan,
 )
 
 _settings = get_settings()
@@ -95,8 +112,11 @@ def _client_ip(request: Request) -> str:
 
 
 def _get_cache() -> SQLiteCache:
-    settings = get_settings()
-    return SQLiteCache(settings.db_path)
+    cache = getattr(app.state, "cache", None)
+    if cache is None:
+        cache = SQLiteCache(get_settings().db_path)
+        app.state.cache = cache
+    return cache
 
 
 def _resolve_target(
@@ -327,13 +347,24 @@ async def api_get_omirl_station_chart(
     ),
     sensor: str = Query(default="Vento", pattern="^(Vento|Termo|Pluvio|Idro)$", description="Tipo sensore OMIRL"),
 ) -> dict[str, Any]:
-    """Restituisce la serie storica reale al minuto di una centralina OMIRL Regione Liguria."""
-    import httpx
+    """Restituisce la serie storica reale al minuto di una centralina OMIRL Regione Liguria (con cache TTL 180s)."""
+    cache = _get_cache()
+    chart_key = f"omirl_chart:{code.upper()}:{sensor}"
+    cached = cache.get(chart_key, allow_stale=False)
+    if cached:
+        return cached.payload
 
     try:
-        async with httpx.AsyncClient(timeout=8.0) as client:
-            return await fetch_omirl_station_chart(client, short_code=code, sensor_type=sensor)
+        shared_client = getattr(app.state, "http_client", None)
+        if shared_client is not None:
+            data = await fetch_omirl_station_chart(shared_client, short_code=code, sensor_type=sensor)
+        else:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                data = await fetch_omirl_station_chart(client, short_code=code, sensor_type=sensor)
+        cache.set(chart_key, data, ttl_seconds=180, category="omirl_chart")
+        return data
     except Exception as exc:
+        logger.warning("Errore fetch omirl-chart %s/%s: %s", code, sensor, exc)
         raise HTTPException(
             status_code=502,
             detail="Serie storica OMIRL temporaneamente non disponibile.",

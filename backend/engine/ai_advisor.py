@@ -12,9 +12,12 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+import logging
 from typing import Any
 
 from backend.config import get_settings
+
+logger = logging.getLogger("mediometeo.ai_advisor")
 
 
 def build_deterministic_synoptic_bulletin(
@@ -176,5 +179,6 @@ async def generate_ai_bulletin(
             baseline["engine"] = f"google_genai ({settings.gemini_model})"
             baseline["synoptic_nowcast_analysis"] = ai_text.strip()
         return baseline
-    except Exception:
+    except Exception as exc:
+        logger.warning("Fallback deterministico AI Advisor per errore Gemini: %s", exc)
         return baseline
