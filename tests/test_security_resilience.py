@@ -82,8 +82,13 @@ def test_frontend_xss_and_no_inline_onclick() -> None:
     assert "<script>" not in index_html
     assert "<script>" not in orologio_html
     assert "onclick=" not in app_js
+    for js_file in (root / "js").glob("*.js"):
+        js_src = js_file.read_text(encoding="utf-8")
+        assert "onclick=" not in js_src
     assert "function escapeHtml(" in security_js
     assert "function sanitizeHttpUrl(" in security_js
+    assert 'id="map-inspector-drawer"' in index_html
+    assert 'id="liguria-watch-banner"' in index_html
 
 
 def test_omirl_chart_validation_and_security_headers(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -8,39 +8,20 @@
    - Modalità Mare a fisica costiera pura (zero semafori consiglio soggettivi).
    ========================================================================== */
 
-import { escapeHtml, sanitizeHttpUrl } from "/static/js/security.js?v=2.6";
-import { LEVEL_LABELS, SVG_ICONS } from "/static/js/icons.js?v=2.6";
+import { escapeHtml, sanitizeHttpUrl } from "/static/js/security.js?v=3.0";
+import { LEVEL_LABELS, SVG_ICONS } from "/static/js/icons.js?v=3.0";
+import { loadFavorites, saveFavorites, state } from "/static/js/state.js?v=3.0";
+import {
+  fetchCoastalRoute,
+  fetchLocationsCatalog,
+  fetchOmirlChart,
+  fetchWeatherAndBulletin,
+} from "/static/js/api.js?v=3.0";
+import { renderCharts as renderChartsModule } from "/static/js/charts.js?v=3.0";
 
-const state = {
-  mode: "land", // 'land' | 'sea'
-  activeTab: "tab-mappa", // Scheda predefinita all'avvio: 3. Mappa operativa live
-  selectedLocationId: "COM-GENOVA",
-  customCoords: null, // { lat, lon }
-  locations: [],
-  filteredLocations: [],
-  ampZones: [],
-  coastalWaypoints: [],
-  weatherPkg: null,
-  aiBulletin: null,
-  routePlan: null,
-  map: null,
-  radarLayer: null,
-  radarVisible: true,
-  radarPlaying: false,
-  radarTimer: null,
-  radarFrameIndex: 0,
-  omirlLayerGroup: null,
-  omirlVisible: true,
-  webcamLayerGroup: null,
-  webcamsVisible: false,
-  ampLayerGroup: null,
-  ampVisible: true,
-  locationsLayerGroup: null,
-  routePolyline: null,
-  customMarker: null,
-  chartMultiModel: null,
-  chartWindWave: null,
-};
+function renderCharts(hourly48) {
+  renderChartsModule(hourly48, state);
+}
 
 function setBadgeLevel(el, level, text) {
   if (!el) return;
@@ -175,7 +156,7 @@ async function initApp() {
       .getRegistrations()
       .then((regs) => regs.forEach((r) => r.update().catch(() => {})))
       .catch(() => {});
-    navigator.serviceWorker.register("/sw.js?v=2.6").catch(() => {});
+    navigator.serviceWorker.register("/sw.js?v=3.0").catch(() => {});
   }
 }
 
@@ -500,36 +481,13 @@ async function switchMode(targetMode) {
 }
 
 async function loadLocationsCatalog() {
-  const res = await fetch("/api/v1/locations");
-  const data = await res.json();
+  const data = await fetchLocationsCatalog();
   state.locations = data.locations || [];
   state.ampZones = data.amp_portofino_zones || [];
   state.coastalWaypoints = data.coastal_waypoints || [];
 
   populateLocationSelect();
   populateRouteWaypoints();
-}
-
-const FAV_STORAGE_KEY = "mediometeo_favorites_v1";
-const DEFAULT_FAVORITES = ["COM-GENOVA", "COM-PORTOFINO", "QRT-GENOVA-MARASSI", "COM-ARENZANO"];
-
-function loadFavorites() {
-  try {
-    const raw = localStorage.getItem(FAV_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length) {
-        return parsed.slice(0, 5);
-      }
-    }
-  } catch (_) {}
-  return [...DEFAULT_FAVORITES];
-}
-
-function saveFavorites(ids) {
-  try {
-    localStorage.setItem(FAV_STORAGE_KEY, JSON.stringify(ids.slice(0, 5)));
-  } catch (_) {}
 }
 
 function renderFavoritesBar() {
@@ -1167,12 +1125,16 @@ function renderMapOverlays() {
         iconAnchor: [12, 12],
       });
       const m = L.marker([cam.lat, cam.lon], { icon }).addTo(state.webcamLayerGroup);
-      const imgPreview = cam.live_image_url
-        ? `<img src="${cam.live_image_url}" alt="${cam.name}" style="width:200px;border-radius:4px;margin:4px 0;display:block;" />`
+      const safeImg = sanitizeHttpUrl(cam.live_image_url);
+      const safePortal = sanitizeHttpUrl(cam.portal_url);
+      const imgPreview = safeImg
+        ? `<img src="${safeImg}" alt="${escapeHtml(cam.name)}" style="width:200px;border-radius:4px;margin:4px 0;display:block;" />`
+        : "";
+      const portalLink = safePortal
+        ? `<a href="${safePortal}" target="_blank" rel="noopener noreferrer" style="color:#5ab9fc;font-weight:600;">Apri stream / portale live</a>`
         : "";
       m.bindPopup(
-        `<strong>${cam.name}</strong><br>${cam.view_direction}<br>${imgPreview}` +
-          `<a href="${cam.portal_url}" target="_blank" rel="noopener" style="color:#5ab9fc;font-weight:600;">Apri stream / portale live</a>`
+        `<strong>${escapeHtml(cam.name)}</strong><br>${escapeHtml(cam.view_direction)}<br>${imgPreview}${portalLink}`
       );
     });
   }
@@ -1245,22 +1207,8 @@ function updateRadarLayer() {
 }
 
 async function refreshAllData(forceRefresh = false) {
-  const params = new URLSearchParams();
-  params.set("mode", state.mode);
-  if (forceRefresh) params.set("refresh", "true");
-
-  if (state.customCoords) {
-    params.set("lat", state.customCoords.lat);
-    params.set("lon", state.customCoords.lon);
-  } else {
-    params.set("location", state.selectedLocationId);
-  }
-
   try {
-    const [forecastRes, aiRes] = await Promise.all([
-      fetch(`/api/v1/forecast?${params.toString()}`),
-      fetch(`/api/v1/ai-bulletin?${params.toString()}`),
-    ]);
+    const { forecastRes, aiRes } = await fetchWeatherAndBulletin(state, forceRefresh);
 
     if (!forecastRes.ok) {
       const err = await forecastRes.json();
@@ -1671,7 +1619,7 @@ window.inspectOmirlStationChart = async function inspectOmirlStationChart(code, 
   const originalHtml = btnEl.innerHTML;
   btnEl.textContent = "Caricamento serie OMIRL...";
   try {
-    const res = await fetch(`/api/v1/omirl-chart?code=${encodeURIComponent(code)}&sensor=${encodeURIComponent(sensor)}`);
+    const res = await fetchOmirlChart(code, sensor);
     if (!res.ok) {
       btnEl.textContent = "Serie storica 24h non disponibile";
       return;
@@ -2191,9 +2139,8 @@ async function calculateCoastalRoute() {
   });
 
   try {
-    const res = await fetch(`/api/v1/route-eta?${params.toString()}`);
-    if (!res.ok) return;
-    const plan = await res.json();
+    const plan = await fetchCoastalRoute(params);
+    if (!plan) return;
     state.routePlan = plan;
 
     const kpiGrid = document.getElementById("route-results-grid");
@@ -2324,171 +2271,6 @@ function renderAIBulletinAndOfficialArpal(bulletin, arpal) {
       <div class="risk-item-desc">${escapeHtml(arpal.synoptic_situation || "")}</div>
     </div>
   ` + daysHtml;
-}
-
-function renderCharts(hourly48) {
-  if (typeof Chart === "undefined" || !hourly48 || !hourly48.length) return;
-
-  const slice24 = hourly48.slice(0, 24);
-  const labels = slice24.map((h) => (h.time.split("T")[1] || h.time).slice(0, 5));
-
-  const aromeRain = slice24.map(
-    (h) => h.models?.meteofrance_arome_france_hd?.precip_mm ?? h.precip_mm
-  );
-  const iconRain = slice24.map((h) => h.models?.icon_d2?.precip_mm ?? h.precip_mm);
-  const ecmwfRain = slice24.map((h) => h.models?.ecmwf_ifs025?.precip_mm ?? h.precip_mm);
-  const consensusTemp = slice24.map((h) => h.temp_c);
-
-  const canvas1 = document.getElementById("chart-multimodel");
-  if (!canvas1) return;
-  const ctx1 = canvas1.getContext("2d");
-  if (state.chartMultiModel) state.chartMultiModel.destroy();
-
-  state.chartMultiModel = new Chart(ctx1, {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [
-        {
-          type: "line",
-          label: "Temp consenso (°C)",
-          data: consensusTemp,
-          borderColor: "#f59e0b",
-          backgroundColor: "rgba(245, 158, 11, 0.15)",
-          yAxisID: "yTemp",
-          tension: 0.35,
-          borderWidth: 2.5,
-          pointRadius: 2,
-        },
-        {
-          label: "AROME 1.3km pioggia (mm/h)",
-          data: aromeRain,
-          backgroundColor: "rgba(90, 185, 252, 0.82)",
-          yAxisID: "yRain",
-        },
-        {
-          label: "ICON-D2 2km pioggia (mm/h)",
-          data: iconRain,
-          backgroundColor: "rgba(16, 185, 129, 0.75)",
-          yAxisID: "yRain",
-        },
-        {
-          label: "ECMWF 9km pioggia (mm/h)",
-          data: ecmwfRain,
-          backgroundColor: "rgba(2, 132, 199, 0.72)",
-          yAxisID: "yRain",
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { labels: { color: "#e9edf3", font: { size: 13, family: "IBM Plex Sans, sans-serif" } } },
-      },
-      scales: {
-        x: { ticks: { color: "#8891a1" }, grid: { color: "rgba(233,237,243,0.07)" } },
-        yRain: {
-          position: "left",
-          beginAtZero: true,
-          title: { display: true, text: "mm/h", color: "#5ab9fc" },
-          ticks: { color: "#5ab9fc" },
-          grid: { color: "rgba(233,237,243,0.09)" },
-        },
-        yTemp: {
-          position: "right",
-          title: { display: true, text: "°C", color: "#f59e0b" },
-          ticks: { color: "#f59e0b" },
-          grid: { drawOnChartArea: false },
-        },
-      },
-    },
-  });
-
-  const useKnots = state.mode === "sea";
-  const windSeries = slice24.map((h) => (useKnots ? h.wind_knots : h.wind_kmh));
-  const gustSeries = slice24.map((h) => (useKnots ? h.gust_knots : h.gust_kmh));
-  const waveHsSeries = slice24.map((h) => h.wave_hs_m);
-  const waveHmaxSeries = slice24.map((h) => h.wave_hmax_m);
-
-  const canvas2 = document.getElementById("chart-wind-wave");
-  if (!canvas2) return;
-  const ctx2 = canvas2.getContext("2d");
-  if (state.chartWindWave) state.chartWindWave.destroy();
-
-  state.chartWindWave = new Chart(ctx2, {
-    type: "line",
-    data: {
-      labels,
-      datasets: [
-        {
-          label: useKnots ? "Vento medio (kt)" : "Vento medio (km/h)",
-          data: windSeries,
-          borderColor: "#10b981",
-          backgroundColor: "rgba(16, 185, 129, 0.15)",
-          yAxisID: "yWind",
-          tension: 0.3,
-          borderWidth: 2,
-        },
-        {
-          label: useKnots ? "Raffiche (kt)" : "Raffiche (km/h)",
-          data: gustSeries,
-          borderColor: "#ef4444",
-          borderDash: [4, 4],
-          yAxisID: "yWind",
-          tension: 0.3,
-          borderWidth: 2,
-        },
-        {
-          label: "Onda significativa Hs (m)",
-          data: waveHsSeries,
-          borderColor: "#5ab9fc",
-          backgroundColor: "rgba(90, 185, 252, 0.2)",
-          fill: true,
-          yAxisID: "yWave",
-          tension: 0.35,
-          borderWidth: 2.5,
-        },
-        {
-          label: "Onda max statistica Hmax (m)",
-          data: waveHmaxSeries,
-          borderColor: "#f59e0b",
-          borderDash: [2, 2],
-          yAxisID: "yWave",
-          tension: 0.35,
-          borderWidth: 1.5,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { labels: { color: "#e9edf3", font: { size: 13, family: "IBM Plex Sans, sans-serif" } } },
-      },
-      scales: {
-        x: { ticks: { color: "#8891a1" }, grid: { color: "rgba(233,237,243,0.07)" } },
-        yWind: {
-          position: "left",
-          beginAtZero: true,
-          title: {
-            display: true,
-            text: useKnots ? "Nodi (kt)" : "km/h",
-            color: "#10b981",
-          },
-          ticks: { color: "#10b981" },
-          grid: { color: "rgba(233,237,243,0.09)" },
-        },
-        yWave: {
-          position: "right",
-          beginAtZero: true,
-          title: { display: true, text: "Onda (m)", color: "#5ab9fc" },
-          ticks: { color: "#5ab9fc" },
-          grid: { drawOnChartArea: false },
-        },
-      },
-    },
-  });
 }
 
 function render7DayTable(days) {

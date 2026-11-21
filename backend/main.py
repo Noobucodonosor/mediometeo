@@ -65,7 +65,7 @@ app = FastAPI(
         "Rete Osservativa Reale OMIRL (Stazioni, Idrometri Torrenti, Boe, Webcam Live), "
         "Fisica Costiera Pura e Calcolatore Rotta ETA per i 67 Comuni della Città Metropolitana di Genova e il Golfo Ligure."
     ),
-    version="2.6.0",
+    version="3.0.0",
     lifespan=lifespan,
 )
 
