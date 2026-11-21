@@ -50,12 +50,34 @@ app = FastAPI(
     version="2.0.0",
 )
 
+_settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_settings.cors_origins_list(),
     allow_methods=["GET", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=["Accept", "Content-Type"],
 )
+
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    """Applica header di sicurezza HTTP (ADR-0011)."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; "
+        "script-src 'self' https://unpkg.com https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com "
+        "https://tilecache.rainviewer.com https://omirl.regione.liguria.it https://unpkg.com; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'",
+    )
+    return response
 
 
 def _get_cache() -> SQLiteCache:
@@ -269,7 +291,13 @@ async def api_get_observations(
 
 @app.get("/api/v1/omirl-chart")
 async def api_get_omirl_station_chart(
-    code: str = Query(..., min_length=2, max_length=12, description="ShortCode centralina OMIRL (es. GEPOA, MTPOR, FIRPO)"),
+    code: str = Query(
+        ...,
+        min_length=2,
+        max_length=12,
+        pattern="^[A-Za-z0-9_-]{2,12}$",
+        description="ShortCode centralina OMIRL (es. GEPOA, MTPOR, FIRPO)",
+    ),
     sensor: str = Query(default="Vento", pattern="^(Vento|Termo|Pluvio|Idro)$", description="Tipo sensore OMIRL"),
 ) -> dict[str, Any]:
     """Restituisce la serie storica reale al minuto di una centralina OMIRL Regione Liguria."""
@@ -281,7 +309,7 @@ async def api_get_omirl_station_chart(
     except Exception as exc:
         raise HTTPException(
             status_code=502,
-            detail=f"Serie storica OMIRL non disponibile per {code}/{sensor}: {exc}",
+            detail="Serie storica OMIRL temporaneamente non disponibile.",
         ) from exc
 
 

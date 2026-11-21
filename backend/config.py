@@ -32,6 +32,13 @@ class Settings:
     weatherapi_key: str = os.getenv("WEATHERAPI_KEY", "").strip()
     stormglass_api_key: str = os.getenv("STORMGLASS_API_KEY", "").strip()
     windy_api_key: str = os.getenv("WINDY_API_KEY", "").strip()
+    cors_allow_origins: str = os.getenv(
+        "CORS_ALLOW_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000"
+    ).strip()
+
+    def cors_origins_list(self) -> list[str]:
+        """Restituisce la lista delle origini CORS consentite."""
+        return [o.strip() for o in self.cors_allow_origins.split(",") if o.strip()]
 
     # Dominio Geografico Liguria / Golfo di Genova (ADR-0002 Geofencing)
     min_lat: float = 43.50
@@ -69,4 +76,7 @@ def get_settings() -> Settings:
         weatherapi_key=os.getenv("WEATHERAPI_KEY", "").strip(),
         stormglass_api_key=os.getenv("STORMGLASS_API_KEY", "").strip(),
         windy_api_key=os.getenv("WINDY_API_KEY", "").strip(),
+        cors_allow_origins=os.getenv(
+            "CORS_ALLOW_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000"
+        ).strip(),
     )

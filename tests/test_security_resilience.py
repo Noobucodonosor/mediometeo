@@ -77,3 +77,31 @@ def test_frontend_xss_and_no_inline_onclick() -> None:
     assert "onclick=" not in app_js
     assert "function escapeHtml(" in app_js
     assert "function sanitizeHttpUrl(" in app_js
+
+
+def test_omirl_chart_validation_and_security_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verifica regex code su /api/v1/omirl-chart, errori sanitizzati, SRI e security headers (TASK-SEC-03 / #27)."""
+    from pathlib import Path
+
+    # 1. Path traversal / caratteri non ammessi -> 422
+    bad_resp = client.get("/api/v1/omirl-chart?code=../etc&sensor=Vento")
+    assert bad_resp.status_code == 422
+
+    # 2. Errore upstream -> 502 sanitizzato senza leak di eccezioni raw
+    async def mock_boom(*args, **kwargs):
+        raise RuntimeError("SECRET_INTERNAL_TRACE_123")
+
+    monkeypatch.setattr("backend.main.fetch_omirl_station_chart", mock_boom)
+    err_resp = client.get("/api/v1/omirl-chart?code=GEPOA&sensor=Vento")
+    assert err_resp.status_code == 502
+    assert "SECRET_INTERNAL_TRACE_123" not in err_resp.text
+
+    # 3. Security headers presenti sulle risposte HTTP
+    health = client.get("/api/v1/health")
+    assert health.headers.get("x-content-type-options") == "nosniff"
+    assert health.headers.get("x-frame-options") == "DENY"
+    assert "script-src 'self'" in (health.headers.get("content-security-policy") or "")
+
+    # 4. SRI sui tag CDN di index.html
+    index_html = (Path(__file__).resolve().parent.parent / "frontend" / "index.html").read_text(encoding="utf-8")
+    assert index_html.count('integrity="sha384-') == 3
