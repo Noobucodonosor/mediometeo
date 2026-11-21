@@ -273,12 +273,27 @@
           <div class="map-layers-pills" role="group" aria-label="Livelli mappa">
             <button id="btn-toggle-radar" type="button" class="map-pill active" aria-pressed="true">Radar</button>
             <button id="btn-toggle-omirl" type="button" class="map-pill active" aria-pressed="true">OMIRL</button>
-            <button id="btn-toggle-webcams" type="button" class="map-pill active" aria-pressed="true">Webcam</button>
+            <button id="btn-toggle-webcams" type="button" class="map-pill" aria-pressed="false">Webcam</button>
             <button id="btn-toggle-amp" type="button" class="map-pill active" aria-pressed="true">AMP</button>
           </div>
         </div>
 
         <div id="genova-map" role="application" aria-label="Mappa interattiva Provincia di Genova e Golfo Ligure"></div>
+
+        <aside id="map-inspector-drawer" class="map-inspector" hidden aria-label="Dettaglio punto selezionato">
+          <div class="map-inspector-head">
+            <div>
+              <strong id="inspector-title" class="map-inspector-title">--</strong>
+              <span id="inspector-meta" class="map-inspector-meta">--</span>
+            </div>
+            <button type="button" id="btn-inspector-close" class="btn-action map-inspector-close" aria-label="Chiudi dettaglio">✕</button>
+          </div>
+          <div id="inspector-metrics" class="map-inspector-metrics"></div>
+          <div id="inspector-chart-slot" class="map-inspector-chart-slot"></div>
+          <div class="map-inspector-actions">
+            <button type="button" id="btn-inspector-open-adesso" class="btn-action btn-primary-action">Apri scheda Adesso</button>
+          </div>
+        </aside>
 
         <div class="map-floating-bottom">
           <div class="radar-player-controls">

@@ -32,7 +32,7 @@ const state = {
   omirlLayerGroup: null,
   omirlVisible: true,
   webcamLayerGroup: null,
-  webcamsVisible: true,
+  webcamsVisible: false,
   ampLayerGroup: null,
   ampVisible: true,
   locationsLayerGroup: null,
@@ -195,6 +195,28 @@ function bindUIEvents() {
   const btnAdessoToMap = document.getElementById("btn-adesso-to-map");
   if (btnAdessoToMap) {
     btnAdessoToMap.addEventListener("click", () => window.switchTab("tab-mappa"));
+  }
+
+  const btnInspectorClose = document.getElementById("btn-inspector-close");
+  if (btnInspectorClose) {
+    btnInspectorClose.addEventListener("click", closeMapInspector);
+  }
+  const btnInspectorOpenAdesso = document.getElementById("btn-inspector-open-adesso");
+  if (btnInspectorOpenAdesso) {
+    btnInspectorOpenAdesso.addEventListener("click", () => {
+      closeMapInspector();
+      window.switchTab("tab-adesso");
+    });
+  }
+  const inspectorSlot = document.getElementById("inspector-chart-slot");
+  if (inspectorSlot) {
+    inspectorSlot.addEventListener("click", (ev) => {
+      const btn = ev.target.closest(".btn-omirl-chart");
+      if (!btn) return;
+      const code = btn.getAttribute("data-station-code");
+      const sensor = btn.getAttribute("data-sensor") || "Vento";
+      if (code) window.inspectOmirlStationChart(code, sensor, btn);
+    });
   }
 
   const omirlStationsGrid = document.getElementById("omirl-stations-grid");
@@ -591,6 +613,42 @@ function populateRouteWaypoints() {
   selDest.value = "san_fruttuoso";
 }
 
+function closeMapInspector() {
+  const drawer = document.getElementById("map-inspector-drawer");
+  if (drawer) drawer.hidden = true;
+}
+
+function openMapInspector({ title, meta, metrics, stationCode = null, sensor = "Vento" }) {
+  const drawer = document.getElementById("map-inspector-drawer");
+  if (!drawer) return;
+  const titleEl = document.getElementById("inspector-title");
+  const metaEl = document.getElementById("inspector-meta");
+  const metricsEl = document.getElementById("inspector-metrics");
+  const chartSlot = document.getElementById("inspector-chart-slot");
+
+  if (titleEl) titleEl.textContent = title || "--";
+  if (metaEl) metaEl.textContent = meta || "--";
+  if (metricsEl) {
+    metricsEl.innerHTML = (metrics || [])
+      .map(
+        (m) => `
+      <div class="map-inspector-kv">
+        <span>${escapeHtml(m.label)}</span>
+        <strong>${escapeHtml(m.value)}</strong>
+      </div>`
+      )
+      .join("");
+  }
+  if (chartSlot) {
+    if (stationCode) {
+      chartSlot.innerHTML = `<button type="button" class="btn-action btn-omirl-chart" data-station-code="${escapeHtml(stationCode)}" data-sensor="${escapeHtml(sensor)}">Curva 24h OMIRL (${escapeHtml(sensor)})</button>`;
+    } else {
+      chartSlot.innerHTML = "";
+    }
+  }
+  drawer.hidden = false;
+}
+
 function initLeafletMap() {
   if (typeof L === "undefined") return;
 
@@ -619,6 +677,41 @@ function initLeafletMap() {
     interactive: false,
   }).addTo(state.map);
 
+  // Torrenti principali genovesi & etichette costiere minimali sempre visibili
+  const riverPaths = [
+    [[44.50, 8.91], [44.45, 8.895], [44.415, 8.885]], // Polcevera
+    [[44.48, 9.01], [44.44, 8.97], [44.398, 8.947]], // Bisagno
+    [[44.56, 8.66], [44.51, 8.68], [44.46, 8.66]], // Stura
+    [[44.42, 9.41], [44.36, 9.35], [44.31, 9.33]], // Entella
+  ];
+  riverPaths.forEach((coords) => {
+    L.polyline(coords, {
+      color: "rgba(90, 185, 252, 0.35)",
+      weight: 1.4,
+      dashArray: "3, 4",
+      interactive: false,
+    }).addTo(state.map);
+  });
+
+  [
+    { name: "Voltri", lat: 44.432, lon: 8.75 },
+    { name: "Genova", lat: 44.422, lon: 8.934 },
+    { name: "Camogli", lat: 44.356, lon: 9.155 },
+    { name: "Portofino", lat: 44.303, lon: 9.211 },
+    { name: "Chiavari", lat: 44.322, lon: 9.325 },
+    { name: "Sestri Lev.", lat: 44.274, lon: 9.395 },
+  ].forEach((hub) => {
+    L.marker([hub.lat, hub.lon], {
+      interactive: false,
+      icon: L.divIcon({
+        html: `<span class="map-hub-label">${escapeHtml(hub.name)}</span>`,
+        className: "",
+        iconSize: [72, 16],
+        iconAnchor: [36, 8],
+      }),
+    }).addTo(state.map);
+  });
+
   // Base Map OpenStreetMap Ufficiale (100% Free, Zero API Key) con filtro Dark Sala Operativa
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "&copy; OpenStreetMap contributors | MedioMeteo Genova",
@@ -646,7 +739,7 @@ function initLeafletMap() {
     renderMapOverlays();
   });
 
-  // Click libero sulla Mappa Live -> seleziona coordinata e passa automaticamente a 1. Adesso
+  // Click libero sulla Mappa Live -> seleziona coordinata e apre Inspector Drawer
   state.map.on("click", async (ev) => {
     const lat = Number(ev.latlng.lat.toFixed(4));
     const lon = Number(ev.latlng.lng.toFixed(4));
@@ -665,8 +758,27 @@ function initLeafletMap() {
       .addTo(state.map)
       .bindTooltip(`Punto selezionato: <strong>${lat}, ${lon}</strong>`);
 
+    openMapInspector({
+      title: `Punto selezionato (${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E)`,
+      meta: "Caricamento modello locale e sensori...",
+      metrics: [],
+    });
     await refreshAllData(false);
-    window.switchTab("tab-adesso");
+    if (state.weatherPkg) {
+      const cur = state.weatherPkg.nowcast?.current || {};
+      const waves = state.weatherPkg.sea?.marine_conditions?.waves || {};
+      const locName = state.weatherPkg.location?.name || "Punto su mappa";
+      openMapInspector({
+        title: locName,
+        meta: `${lat.toFixed(4)}°N, ${lon.toFixed(4)}°E`,
+        metrics: [
+          { label: "Temperatura", value: `${cur.temp_c ?? "--"}°C` },
+          { label: "Vento", value: `${cur.wind_knots ?? "--"} kt (r.${cur.gust_knots ?? "--"})` },
+          { label: "Pioggia 1h", value: `${cur.precip_mm ?? 0} mm` },
+          { label: "Onda Hs", value: `${waves.significant_height_m ?? "--"} m` },
+        ],
+      });
+    }
   });
 }
 
@@ -680,34 +792,10 @@ function renderLocationsOnMap() {
   state.locations.forEach((loc) => {
     if (typeFilter && loc.loc_type !== typeFilter) return;
 
-    const isMajorHub =
-      loc.loc_type === "rada_porto" ||
-      loc.loc_type === "valico" ||
-      loc.id === state.selectedLocationId ||
-      [
-        "COM-GENOVA",
-        "COM-ARENZANO",
-        "COM-COGOLETO",
-        "COM-CAMPO-LIGURE",
-        "COM-BUSALLA",
-        "COM-TORRIGLIA",
-        "COM-RECCO",
-        "COM-CAMOGLI",
-        "COM-PORTOFINO",
-        "COM-SANTA-MARGHERITA-LIGURE",
-        "COM-RAPALLO",
-        "COM-CHIAVARI",
-        "COM-LAVAGNA",
-        "COM-SESTRI-LEVANTE",
-        "COM-MONEGLIA",
-        "COM-SANTO-STEFANO-D-AVETO",
-      ].includes(loc.id);
-
-    if (!typeFilter && currentZoom < 11 && !isMajorHub) {
+    const isSelected = loc.id === state.selectedLocationId;
+    if (!typeFilter && currentZoom < 12 && !isSelected) {
       return;
     }
-
-    const isSelected = loc.id === state.selectedLocationId;
     const styleMap = {
       comune: { code: "CM", bg: "#10b981", fg: "#06130e" },
       quartiere: { code: "QT", bg: "#34d399", fg: "#06130e" },
@@ -878,8 +966,21 @@ function renderMapOverlays() {
       m.on("click", async (ev) => {
         L.DomEvent.stopPropagation(ev);
         state.customCoords = { lat: st.lat, lon: st.lon };
+        const defaultSensor = hasWind ? "Vento" : st.has_live_temp !== false ? "Termo" : "Pluvio";
+        const gustLabel = st.gust_estimated ? `~${st.gust_knots} kt` : `${st.gust_knots} kt`;
+        openMapInspector({
+          title: `${st.name} (${st.code})`,
+          meta: `${st.muni || "Genova"} • Quota ${st.elev_m} m • Ore ${st.observed_at}`,
+          metrics: [
+            { label: "Temperatura", value: `${st.temp_c ?? "--"}°C` },
+            { label: "Vento / Raffica", value: hasWind ? `${st.wind_knots} / ${gustLabel}` : `Rif. ${st.wind_knots} kt` },
+            { label: "Pioggia 1h", value: `${st.precip_1h_mm ?? 0} mm` },
+            { label: "Sensore", value: st.sensor || "OMIRL" },
+          ],
+          stationCode: st.code,
+          sensor: defaultSensor,
+        });
         await refreshAllData(false);
-        window.switchTab("tab-adesso");
       });
     });
 
@@ -919,6 +1020,21 @@ function renderMapOverlays() {
           `Livello misurato: <strong>${escapeHtml(hy.level_m)} m</strong> (Soglia gialla: ${escapeHtml(hy.warn_threshold_m)} m / Rossa: ${escapeHtml(hy.alarm_threshold_m)} m)<br>` +
           `${escapeHtml(hy.status_label)} • Ore ${escapeHtml(hy.observed_at)}`
       );
+      m.on("click", (ev) => {
+        L.DomEvent.stopPropagation(ev);
+        openMapInspector({
+          title: `Idrometro ${hy.name} (${hy.code})`,
+          meta: `Torrente ${hy.river} • Ore ${hy.observed_at}`,
+          metrics: [
+            { label: "Livello alveo", value: `${hy.level_m} m` },
+            { label: "Soglia gialla", value: `${hy.warn_threshold_m} m` },
+            { label: "Soglia rossa", value: `${hy.alarm_threshold_m} m` },
+            { label: "Stato", value: hy.status_level === "green" ? "Regolare" : "Guardia" },
+          ],
+          stationCode: hy.code,
+          sensor: "Idro",
+        });
+      });
     });
 
     // Boa ondametrica Capo Mele (se disponibile)
@@ -1527,10 +1643,10 @@ window.inspectOmirlStationChart = async function inspectOmirlStationChart(code, 
     const areaPoints = `${firstX},${h - 2} ${polylinePoints} ${lastX},${h - 2}`;
 
     btnEl.outerHTML = `
-      <div class="omirl-sparkline-box" role="region" aria-label="Serie storica 24h ${sensor} ${code}">
+      <div class="omirl-sparkline-box" role="region" aria-label="Serie storica 24h ${escapeHtml(sensor)} ${escapeHtml(code)}">
         <div class="omirl-sparkline-head">
-          <span>${sensor} (${code})</span>
-          <strong>${latestPt.value}${unit ? " " + unit : ""}</strong>
+          <span>${escapeHtml(sensor)} (${escapeHtml(code)})</span>
+          <strong>${escapeHtml(latestPt.value)}${unit ? " " + escapeHtml(unit) : ""}</strong>
         </div>
         <svg class="omirl-sparkline-svg" viewBox="0 0 220 48" preserveAspectRatio="none" role="img" aria-label="Andamento ultime 24 letture ${sensor}">
           <line x1="0" y1="24" x2="220" y2="24" stroke="rgba(233,237,243,0.12)" stroke-dasharray="2,3" stroke-width="1" />
