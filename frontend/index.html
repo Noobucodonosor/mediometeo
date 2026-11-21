@@ -404,36 +404,40 @@
           <a href="/orologio" class="btn-action">Apri orologio (/orologio)</a>
         </div>
 
-        <div class="route-form-grid">
-          <div class="form-field">
-            <label for="route-origin">Partenza</label>
-            <select id="route-origin" class="form-input"></select>
+        <div class="route-split-grid">
+          <div class="route-form-grid">
+            <div class="form-field">
+              <label for="route-origin">Partenza</label>
+              <select id="route-origin" class="form-input"></select>
+            </div>
+            <div class="form-field">
+              <label for="route-dest">Destinazione</label>
+              <select id="route-dest" class="form-input"></select>
+            </div>
+            <div class="form-field">
+              <label for="route-speed">Velocità crociera (kt)</label>
+              <input id="route-speed" type="number" min="1" max="40" step="0.5" value="6.0" class="form-input" />
+            </div>
+            <div class="form-field">
+              <label for="route-duration">Durata uscita (min)</label>
+              <input id="route-duration" type="number" min="20" max="600" step="10" value="90" class="form-input" />
+            </div>
+            <div class="form-field">
+              <label for="route-stop">Sosta in cala (min)</label>
+              <input id="route-stop" type="number" min="0" max="240" step="5" value="20" class="form-input" />
+            </div>
+            <div class="form-field">
+              <button id="btn-calc-route" type="button" class="btn-action btn-primary-action">
+                Calcola rotta ed ETA
+              </button>
+            </div>
           </div>
-          <div class="form-field">
-            <label for="route-dest">Destinazione</label>
-            <select id="route-dest" class="form-input"></select>
-          </div>
-          <div class="form-field">
-            <label for="route-speed">Velocità crociera (kt)</label>
-            <input id="route-speed" type="number" min="1" max="40" step="0.5" value="6.0" class="form-input" />
-          </div>
-          <div class="form-field">
-            <label for="route-duration">Durata uscita (min)</label>
-            <input id="route-duration" type="number" min="20" max="600" step="10" value="90" class="form-input" />
-          </div>
-          <div class="form-field">
-            <label for="route-stop">Sosta in cala (min)</label>
-            <input id="route-stop" type="number" min="0" max="240" step="5" value="20" class="form-input" />
-          </div>
-          <div class="form-field">
-            <button id="btn-calc-route" type="button" class="btn-action btn-primary-action">
-              Calcola rotta ed ETA
-            </button>
+
+          <div class="route-output-col">
+            <div id="route-results-grid" class="kpi-grid" style="margin-top: 0;"></div>
+            <div id="route-legs-list" class="risk-list" style="margin-top: 0.9rem;"></div>
           </div>
         </div>
-
-        <div id="route-results-grid" class="kpi-grid" style="margin-top: 1rem;"></div>
-        <div id="route-legs-list" class="risk-list" style="margin-top: 0.9rem;"></div>
       </article>
     </section>
 

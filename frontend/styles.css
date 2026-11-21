@@ -1241,9 +1241,21 @@ select:focus-visible {
   font-weight: 500;
 }
 
+/* Route Split Layout (TASK-UX-09) */
+.route-split-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+.route-output-col { min-width: 0; }
+@media (max-width: 900px) {
+  .route-split-grid { grid-template-columns: 1fr; }
+}
+
 /* AI Bulletin Flat Takeaways */
 .ai-headline { font-size: 1.05rem; font-weight: 500; color: var(--p-accent); margin-bottom: 0.45rem; }
-.ai-synoptic-body { font-size: 0.9375rem; color: var(--p-ink); white-space: pre-line; line-height: 1.6; }
+.ai-synoptic-body { font-size: 0.9375rem; color: var(--p-ink); white-space: pre-line; line-height: 1.68; max-width: 72ch; }
 
 .ai-takeaways {
   display: flex;
