@@ -20,6 +20,7 @@ Questa cartella raccoglie gli **Architecture Decision Records (ADR)** e il **Bac
 | **[ADR-0010](./0010-spatial-tiering-and-cartographic-clarity.md)** | Spatial Tiering & Cartographic Clarity per la Rete OMIRL (199 Sensori) | Proposto | **P1 — Alta** | `@Noobucodonosor` |
 | **[ADR-0011](./0011-frontend-api-security-hardening.md)** | Frontend & API Security Hardening (XSS Escaping, Input Validation, Rate Limiting, Single-Flight & CSP/SRI) | Proposto | **P0 — Critica** | `@Noobucodonosor` |
 | **[ADR-0012](./0012-cicd-deterministic-testing.md)** | CI/CD Pipeline, Deterministic Contract Testing & Browser Gate | Proposto | **P1 — Alta** | `@Noobucodonosor` |
+| **[ADR-0013](./0013-windy-fullscreen-v4-ux-and-contextual-ai.md)** | Esperienza v4.0 Full-Screen Map-First (Windy / Apple Maps) & AI Contestuale (`POST /api/v1/ask`) | Accettato | **P0 — Critica** | `@Noobucodonosor` |
 
 ---
 

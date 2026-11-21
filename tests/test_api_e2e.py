@@ -11,23 +11,18 @@ from backend.main import app
 client = TestClient(app)
 
 
-def test_pwa_root_6tabs_and_smartwatch_view() -> None:
-    """Verifica che la Web App PWA serva le 6 schede chiuse (`tab-mappa` attiva all'avvio) e la vista `/orologio`."""
+def test_pwa_root_windy_v4_and_smartwatch_view() -> None:
+    """Verifica che la Web App PWA v4.0 serva la mappa full-screen Windy-style, Bottom Sheet 3-livelli, AI Ask e /orologio."""
     r_index = client.get("/")
     assert r_index.status_code == 200
     assert "MedioMeteo Genova" in r_index.text
     assert 'meta name="color-scheme"' in r_index.text
-    assert 'id="tab-adesso"' in r_index.text
-    assert 'id="tab-nowcast"' in r_index.text
-    assert 'id="tab-mappa" class="tab-panel active"' in r_index.text
-    assert 'id="tab-modelli"' in r_index.text
-    assert 'id="tab-rotta"' in r_index.text
-    assert 'id="tab-bollettini"' in r_index.text
-    assert 'class="telemetry-hud"' in r_index.text
-    assert 'id="svg-nautical-compass"' in r_index.text
-    assert 'class="map-floating-top"' in r_index.text
-    assert 'id="loc-picker-btn"' in r_index.text
-    assert 'role="toolbar"' in r_index.text
+    assert 'id="genova-map"' in r_index.text
+    assert 'id="layer-rail"' in r_index.text
+    assert 'id="bottom-sheet"' in r_index.text
+    assert 'id="ask-form"' in r_index.text
+    assert 'id="route-panel"' in r_index.text
+    assert 'id="loc-search-input"' in r_index.text
     assert "Verità osservativa" not in r_index.text
 
     r_watch = client.get("/orologio")
@@ -245,5 +240,14 @@ def test_locations_observations_forecast_marine_and_route_offline_contract(
         r_ai = client.get("/api/v1/ai-bulletin?location=COM-GENOVA&mode=both")
         assert r_ai.status_code == 200
         assert "headline" in r_ai.json()
+
+        r_ask = client.post(
+            "/api/v1/ask",
+            json={"question": "Com'è il mare a Portofino?", "location": "COM-PORTOFINO", "mode": "sea"},
+        )
+        assert r_ask.status_code == 200
+        ask_data = r_ask.json()
+        assert ask_data["location_name"] == "Portofino"
+        assert len(ask_data["answer"]) > 20
     finally:
         fastapi_app.state.cache = old_cache

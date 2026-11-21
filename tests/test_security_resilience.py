@@ -87,8 +87,21 @@ def test_frontend_xss_and_no_inline_onclick() -> None:
         assert "onclick=" not in js_src
     assert "function escapeHtml(" in security_js
     assert "function sanitizeHttpUrl(" in security_js
-    assert 'id="map-inspector-drawer"' in index_html
+    assert 'id="bottom-sheet"' in index_html
+    assert 'id="ask-form"' in index_html
     assert 'id="liguria-watch-banner"' in index_html
+
+
+def test_ask_endpoint_validation() -> None:
+    """Verifica validazione input su POST /api/v1/ask (ADR-0013)."""
+    too_short = client.post("/api/v1/ask", json={"question": "a", "location": "COM-GENOVA"})
+    assert too_short.status_code == 422
+
+    too_long = client.post("/api/v1/ask", json={"question": "x" * 300, "location": "COM-GENOVA"})
+    assert too_long.status_code == 422
+
+    outside_liguria = client.post("/api/v1/ask", json={"question": "Piove oggi?", "lat": 41.9, "lon": 12.5})
+    assert outside_liguria.status_code == 422
 
 
 def test_omirl_chart_validation_and_security_headers(monkeypatch: pytest.MonkeyPatch) -> None:

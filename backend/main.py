@@ -13,6 +13,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
 from backend.cache import SQLiteCache
 from backend.config import get_settings
@@ -22,7 +23,7 @@ from backend.districts import (
     get_district,
     list_districts,
 )
-from backend.engine.ai_advisor import generate_ai_bulletin
+from backend.engine.ai_advisor import answer_point_question, generate_ai_bulletin
 from backend.engine.alerts import build_alerts_summary
 from backend.engine.coastal_route import COASTAL_WAYPOINTS, compute_coastal_route_eta
 from backend.engine.connectors import fetch_all_raw_sources
@@ -65,7 +66,7 @@ app = FastAPI(
         "Rete Osservativa Reale OMIRL (Stazioni, Idrometri Torrenti, Boe, Webcam Live), "
         "Fisica Costiera Pura e Calcolatore Rotta ETA per i 67 Comuni della Città Metropolitana di Genova e il Golfo Ligure."
     ),
-    version="3.0.0",
+    version="4.0.0",
     lifespan=lifespan,
 )
 
@@ -73,7 +74,7 @@ _settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_settings.cors_origins_list(),
-    allow_methods=["GET", "OPTIONS"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Accept", "Content-Type"],
 )
 
@@ -556,6 +557,27 @@ async def api_get_ai_bulletin(
     bulletin = await generate_ai_bulletin(pkg, mode=mode)
     cache.set(b_key, bulletin, ttl_seconds=settings.ai_bulletin_ttl_seconds, category="ai_bulletin")
     return bulletin
+
+
+class AskRequest(BaseModel):
+    """Domanda contestuale su un punto specifico della Provincia di Genova o del Mar Ligure (ADR-0013)."""
+
+    question: str = Field(..., min_length=2, max_length=280)
+    location: str | None = None
+    district: str | None = None
+    lat: float | None = None
+    lon: float | None = None
+    mode: str = Field(default="land", pattern="^(land|sea)$")
+
+
+@app.post("/api/v1/ask")
+async def api_ask_point_question(request: Request, body: AskRequest) -> dict[str, Any]:
+    """Risponde a domande contestuali sul punto selezionato usando dati osservativi + 5 modelli (ADR-0013)."""
+    _AI_RATE_LIMITER.check(_client_ip(request))
+    target = body.location or body.district
+    d, loc_meta, custom_coords = _resolve_target(target, body.lat, body.lon, mode=body.mode)
+    pkg = await _load_or_compute_weather_package(d, location_meta=loc_meta, custom_coords=custom_coords)
+    return await answer_point_question(pkg, body.question.strip())
 
 
 # Mount static files per la Web App / PWA se la cartella frontend esiste

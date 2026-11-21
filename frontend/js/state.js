@@ -1,35 +1,33 @@
 /**
- * Stato applicativo centralizzato e gestione Preferiti localStorage (v3.0).
+ * Stato applicativo centralizzato v4.0 e Preferiti localStorage.
  */
 export const FAV_STORAGE_KEY = "mediometeo_favorites_v1";
+export const THEME_STORAGE_KEY = "mediometeo_theme_v4";
 export const DEFAULT_FAVORITES = ["COM-GENOVA", "COM-PORTOFINO", "QRT-GENOVA-MARASSI", "COM-ARENZANO"];
 
 export const state = {
   mode: "land",
-  activeTab: "tab-mappa",
+  activeLayer: "wind", // 'wind' | 'radar' | 'waves' | 'stations'
+  sheetState: "medium", // 'peek' | 'medium' | 'expanded'
+  theme: "light", // 'light' | 'dark'
   selectedLocationId: "COM-GENOVA",
   customCoords: null,
   locations: [],
-  filteredLocations: [],
   ampZones: [],
   coastalWaypoints: [],
   weatherPkg: null,
   aiBulletin: null,
   routePlan: null,
   map: null,
+  baseTileLayer: null,
+  seamarkLayer: null,
+  vectorLandLayer: null,
   radarLayer: null,
-  radarVisible: true,
   radarPlaying: false,
   radarTimer: null,
   radarFrameIndex: 0,
-  omirlLayerGroup: null,
-  omirlVisible: true,
-  webcamLayerGroup: null,
-  webcamsVisible: false,
-  ampLayerGroup: null,
-  ampVisible: true,
-  locationsLayerGroup: null,
-  routePolyline: null,
+  overlayGroup: null,
+  routeGroup: null,
   customMarker: null,
   chartMultiModel: null,
   chartWindWave: null,

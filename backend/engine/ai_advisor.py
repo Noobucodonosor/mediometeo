@@ -182,3 +182,133 @@ async def generate_ai_bulletin(
     except Exception as exc:
         logger.warning("Fallback deterministico AI Advisor per errore Gemini: %s", exc)
         return baseline
+
+
+def _build_deterministic_qa_answer(weather_pkg: dict[str, Any], question: str) -> str:
+    """Risposta fisica deterministica basata esclusivamente sui dati reali del punto (fallback / ask)."""
+    loc = weather_pkg.get("location") or weather_pkg["district"]
+    now = weather_pkg["nowcast"]["current"]
+    conv = weather_pkg["nowcast"]["ligurian_convergence"]
+    land = weather_pkg["land"]["risk_assessment"]
+    sea = weather_pkg["sea"]["marine_conditions"]
+    hourly = weather_pkg["forecast"].get("hourly_48h") or []
+    obs = weather_pkg.get("observations_live") or {}
+
+    next_12h = hourly[:12] if hourly else [now]
+    max_rain_12h = max((h.get("precip_max_lam_mm") or h.get("precip_mm") or 0.0 for h in next_12h), default=0.0)
+    max_gust_kt = max((h.get("gust_knots") or 0.0 for h in next_12h), default=sea["wind"]["gust_knots"])
+    max_wave_m = max((h.get("wave_hs_m") or 0.0 for h in next_12h), default=sea["waves"]["significant_height_m"])
+
+    q = question.lower()
+    st_list = obs.get("nearest_weather_stations") or []
+    st_note = (
+        f" Stazione OMIRL {st_list[0]['name']}: {st_list[0]['temp_c']}°C, vento {st_list[0]['wind_knots']} kt."
+        if st_list
+        else ""
+    )
+
+    if any(k in q for k in ("mare", "onda", "onde", "barca", "uscire", "rada", "risacca", "marea", "bagno", "porto", "navig")):
+        return (
+            f"A {loc['name']} adesso soffia {sea['wind']['ligurian_name']} ({sea['wind']['cardinal']}) a {sea['wind']['speed_knots']} kt "
+            f"con raffiche fino a {sea['wind']['gust_knots']} kt. Mare {sea['waves']['douglas']['label'].lower()} "
+            f"(Hs {sea['waves']['significant_height_m']} m, Hmax {sea['waves']['max_height_m']} m, periodo {sea['waves']['peak_period_s']} s da {sea['waves']['direction_cardinal']}) "
+            f"e risacca a riva stimata di {sea['coastal_physics']['bay_surge']['shore_breaker_height_m']} m; nelle prossime 12 ore picco d'onda fino a {max_wave_m} m e raffica max {max_gust_kt} kt."
+        )
+    if any(k in q for k in ("piov", "piogg", "temporale", "ombrev", "idro", "fiume", "bisagno", "polcevera", "allerta")):
+        hy_list = obs.get("nearest_river_hydrometers") or []
+        hy_txt = (
+            f" Idrometro vicino {hy_list[0]['name']} ({hy_list[0]['river']}): {hy_list[0]['level_m']} m."
+            if hy_list
+            else ""
+        )
+        return (
+            f"Su {loc['name']} al momento piove {land['hydrogeological']['precip_1h_mm']} mm/h ({now['weather_description']}). "
+            f"Nelle prossime 12 ore il picco massimo stimato dai modelli LAM (AROME/ICON-D2) arriva a {max_rain_12h:.1f} mm/h, "
+            f"con indice di convergenza ligure a {conv['convergence_score']}/100.{hy_txt}"
+        )
+    if any(k in q for k in ("vent", "raffic", "tramontana", "scirocco", "libeccio")):
+        return (
+            f"A {loc['name']} il vento è {sea['wind']['ligurian_name']} ({sea['wind']['cardinal']} {sea['wind']['direction_deg']}°) "
+            f"a {now['wind_kmh']} km/h ({sea['wind']['speed_knots']} kt), raffiche {now['gust_kmh']} km/h ({sea['wind']['gust_knots']} kt). "
+            f"Nelle prossime 12 ore le raffiche possono toccare {max_gust_kt} kt.{st_note}"
+        )
+
+    return (
+        f"A {loc['name']}: {now['weather_description']}, {now['temp_c']}°C, pressione {now['pressure_hpa']} hPa ({now['pressure_trend_label']}). "
+        f"Vento {sea['wind']['ligurian_name']} {sea['wind']['speed_knots']} kt (raffiche {sea['wind']['gust_knots']} kt), "
+        f"picco pioggia LAM 12h fino a {max_rain_12h:.1f} mm/h e onda Hs {sea['waves']['significant_height_m']} m.{st_note}"
+    )
+
+
+async def answer_point_question(weather_pkg: dict[str, Any], question: str) -> dict[str, Any]:
+    """Risponde in 2-4 frasi concrete a una domanda contestuale su un punto specifico (ADR-0013)."""
+    settings = get_settings()
+    fallback_answer = _build_deterministic_qa_answer(weather_pkg, question)
+    loc = weather_pkg.get("location") or weather_pkg["district"]
+
+    if not settings.gemini_api_key:
+        return {
+            "location_name": loc["name"],
+            "question": question,
+            "answer": fallback_answer,
+            "ai_powered": False,
+            "engine": "ligurian_synoptic_qa_v4",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    try:
+        from google import genai  # type: ignore
+
+        now = weather_pkg["nowcast"]["current"]
+        conv = weather_pkg["nowcast"]["ligurian_convergence"]
+        land = weather_pkg["land"]["risk_assessment"]
+        sea = weather_pkg["sea"]["marine_conditions"]
+        hourly = weather_pkg["forecast"].get("hourly_48h") or []
+        next_6h = [
+            f"{h['time'][-5:]}: {h['temp_c']}°C, {h['wind_knots']}kt (r.{h['gust_knots']}), pioggia {h['precip_mm']}mm (LAM max {h.get('precip_max_lam_mm', h['precip_mm'])}), onda {h['wave_hs_m']}m"
+            for h in hourly[:6]
+        ]
+
+        prompt = (
+            "Sei un meteorologo ligure amichevole, preciso e sintetico.\n"
+            "Rispondi in italiano naturale in massimo 3 frasi chiare usando SOLO i dati reali forniti sotto. "
+            "In mare riporta i numeri fisici senza dare ordini paternalistici.\n\n"
+            f"LOCALITÀ: {loc['name']} | MODO: {loc.get('category', 'land')}\n"
+            f"ADESSO: {now['weather_description']}, {now['temp_c']}°C, pioggia 1h {land['hydrogeological']['precip_1h_mm']}mm, "
+            f"vento {sea['wind']['ligurian_name']} {sea['wind']['speed_knots']}kt (raffiche {sea['wind']['gust_knots']}kt), "
+            f"onda Hs {sea['waves']['significant_height_m']}m / Hmax {sea['waves']['max_height_m']}m Tp {sea['waves']['peak_period_s']}s, "
+            f"risacca {sea['coastal_physics']['bay_surge']['shore_breaker_height_m']}m, "
+            f"convergenza {conv['convergence_score']}/100, confidenza 5 modelli {now['confidence_pct']}%.\n"
+            f"PROSSIME 6 ORE: {' | '.join(next_6h)}\n\n"
+            f"DOMANDA UTENTE: {question}\n"
+        )
+
+        def _call_gemini_qa() -> str:
+            client = genai.Client(api_key=settings.gemini_api_key)
+            resp = client.models.generate_content(
+                model=settings.gemini_model,
+                contents=prompt,
+            )
+            return resp.text or ""
+
+        ai_text = await asyncio.to_thread(_call_gemini_qa)
+        if ai_text.strip():
+            return {
+                "location_name": loc["name"],
+                "question": question,
+                "answer": ai_text.strip(),
+                "ai_powered": True,
+                "engine": f"google_genai ({settings.gemini_model})",
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            }
+    except Exception as exc:
+        logger.warning("Fallback QA deterministico per errore Gemini: %s", exc)
+
+    return {
+        "location_name": loc["name"],
+        "question": question,
+        "answer": fallback_answer,
+        "ai_powered": False,
+        "engine": "ligurian_synoptic_qa_v4",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }

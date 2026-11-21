@@ -1,5 +1,5 @@
 /**
- * Client HTTP centralizzato verso gli endpoint FastAPI `/api/v1/*` (v3.0).
+ * Client HTTP centralizzato verso gli endpoint FastAPI `/api/v1/*` (v4.0).
  */
 export async function fetchLocationsCatalog() {
   const res = await fetch("/api/v1/locations");
@@ -37,4 +37,17 @@ export async function fetchOmirlChart(code, sensor) {
   return fetch(
     `/api/v1/omirl-chart?code=${encodeURIComponent(code)}&sensor=${encodeURIComponent(sensor)}`
   );
+}
+
+export async function askPointQuestion({ question, location, lat, lon, mode }) {
+  const res = await fetch("/api/v1/ask", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, location, lat, lon, mode }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
 }

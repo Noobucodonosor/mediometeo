@@ -1,8 +1,13 @@
 /**
- * Rendering grafici meteogrammi multi-modello & vento/moto ondoso via Chart.js (v3.0).
+ * Rendering meteogrammi Chart.js v4.0 adattivi a tema Chiaro / Scuro.
  */
 export function renderCharts(hourly48, appState) {
   if (typeof Chart === "undefined" || !hourly48 || !hourly48.length) return;
+
+  const isDark = appState.theme === "dark";
+  const textCol = isDark ? "#e2e8f0" : "#0f172a";
+  const mutedCol = isDark ? "#94a3b8" : "#64748b";
+  const gridCol = isDark ? "rgba(241, 245, 249, 0.08)" : "rgba(15, 23, 42, 0.08)";
 
   const slice24 = hourly48.slice(0, 24);
   const labels = slice24.map((h) => (h.time.split("T")[1] || h.time).slice(0, 5));
@@ -26,31 +31,30 @@ export function renderCharts(hourly48, appState) {
       datasets: [
         {
           type: "line",
-          label: "Temp consenso (°C)",
+          label: "Temp (°C)",
           data: consensusTemp,
-          borderColor: "#f59e0b",
-          backgroundColor: "rgba(245, 158, 11, 0.15)",
+          borderColor: "#d97706",
           yAxisID: "yTemp",
           tension: 0.35,
-          borderWidth: 2.5,
-          pointRadius: 2,
+          borderWidth: 2,
+          pointRadius: 1.5,
         },
         {
-          label: "AROME 1.3km pioggia (mm/h)",
+          label: "AROME (mm/h)",
           data: aromeRain,
-          backgroundColor: "rgba(90, 185, 252, 0.82)",
+          backgroundColor: "rgba(2, 132, 199, 0.8)",
           yAxisID: "yRain",
         },
         {
-          label: "ICON-D2 2km pioggia (mm/h)",
+          label: "ICON-D2 (mm/h)",
           data: iconRain,
-          backgroundColor: "rgba(16, 185, 129, 0.75)",
+          backgroundColor: "rgba(16, 185, 129, 0.72)",
           yAxisID: "yRain",
         },
         {
-          label: "ECMWF 9km pioggia (mm/h)",
+          label: "ECMWF (mm/h)",
           data: ecmwfRain,
-          backgroundColor: "rgba(2, 132, 199, 0.72)",
+          backgroundColor: "rgba(99, 102, 241, 0.65)",
           yAxisID: "yRain",
         },
       ],
@@ -58,24 +62,11 @@ export function renderCharts(hourly48, appState) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: {
-        legend: { labels: { color: "#e9edf3", font: { size: 13, family: "IBM Plex Sans, sans-serif" } } },
-      },
+      plugins: { legend: { labels: { color: textCol, font: { size: 11 } } } },
       scales: {
-        x: { ticks: { color: "#8891a1" }, grid: { color: "rgba(233,237,243,0.07)" } },
-        yRain: {
-          position: "left",
-          beginAtZero: true,
-          title: { display: true, text: "mm/h", color: "#5ab9fc" },
-          ticks: { color: "#5ab9fc" },
-          grid: { color: "rgba(233,237,243,0.09)" },
-        },
-        yTemp: {
-          position: "right",
-          title: { display: true, text: "°C", color: "#f59e0b" },
-          ticks: { color: "#f59e0b" },
-          grid: { drawOnChartArea: false },
-        },
+        x: { ticks: { color: mutedCol }, grid: { color: gridCol } },
+        yRain: { position: "left", beginAtZero: true, ticks: { color: "#0284c7" }, grid: { color: gridCol } },
+        yTemp: { position: "right", ticks: { color: "#d97706" }, grid: { drawOnChartArea: false } },
       },
     },
   });
@@ -84,7 +75,6 @@ export function renderCharts(hourly48, appState) {
   const windSeries = slice24.map((h) => (useKnots ? h.wind_knots : h.wind_kmh));
   const gustSeries = slice24.map((h) => (useKnots ? h.gust_knots : h.gust_kmh));
   const waveHsSeries = slice24.map((h) => h.wave_hs_m);
-  const waveHmaxSeries = slice24.map((h) => h.wave_hmax_m);
 
   const canvas2 = document.getElementById("chart-wind-wave");
   if (!canvas2) return;
@@ -97,70 +87,45 @@ export function renderCharts(hourly48, appState) {
       labels,
       datasets: [
         {
-          label: useKnots ? "Vento medio (kt)" : "Vento medio (km/h)",
+          label: useKnots ? "Vento (kt)" : "Vento (km/h)",
           data: windSeries,
-          borderColor: "#10b981",
-          backgroundColor: "rgba(16, 185, 129, 0.15)",
+          borderColor: "#059669",
           yAxisID: "yWind",
           tension: 0.3,
           borderWidth: 2,
+          pointRadius: 1.5,
         },
         {
           label: useKnots ? "Raffiche (kt)" : "Raffiche (km/h)",
           data: gustSeries,
-          borderColor: "#ef4444",
+          borderColor: "#dc2626",
           borderDash: [4, 4],
           yAxisID: "yWind",
           tension: 0.3,
-          borderWidth: 2,
+          borderWidth: 1.5,
+          pointRadius: 0,
         },
         {
-          label: "Onda significativa Hs (m)",
+          label: "Onda Hs (m)",
           data: waveHsSeries,
-          borderColor: "#5ab9fc",
-          backgroundColor: "rgba(90, 185, 252, 0.2)",
+          borderColor: "#0284c7",
+          backgroundColor: "rgba(2, 132, 199, 0.14)",
           fill: true,
           yAxisID: "yWave",
           tension: 0.35,
-          borderWidth: 2.5,
-        },
-        {
-          label: "Onda max statistica Hmax (m)",
-          data: waveHmaxSeries,
-          borderColor: "#f59e0b",
-          borderDash: [2, 2],
-          yAxisID: "yWave",
-          tension: 0.35,
-          borderWidth: 1.5,
+          borderWidth: 2,
+          pointRadius: 1.5,
         },
       ],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: {
-        legend: { labels: { color: "#e9edf3", font: { size: 13, family: "IBM Plex Sans, sans-serif" } } },
-      },
+      plugins: { legend: { labels: { color: textCol, font: { size: 11 } } } },
       scales: {
-        x: { ticks: { color: "#8891a1" }, grid: { color: "rgba(233,237,243,0.07)" } },
-        yWind: {
-          position: "left",
-          beginAtZero: true,
-          title: {
-            display: true,
-            text: useKnots ? "Nodi (kt)" : "km/h",
-            color: "#10b981",
-          },
-          ticks: { color: "#10b981" },
-          grid: { color: "rgba(233,237,243,0.09)" },
-        },
-        yWave: {
-          position: "right",
-          beginAtZero: true,
-          title: { display: true, text: "Onda (m)", color: "#5ab9fc" },
-          ticks: { color: "#5ab9fc" },
-          grid: { drawOnChartArea: false },
-        },
+        x: { ticks: { color: mutedCol }, grid: { color: gridCol } },
+        yWind: { position: "left", beginAtZero: true, ticks: { color: "#059669" }, grid: { color: gridCol } },
+        yWave: { position: "right", beginAtZero: true, ticks: { color: "#0284c7" }, grid: { drawOnChartArea: false } },
       },
     },
   });

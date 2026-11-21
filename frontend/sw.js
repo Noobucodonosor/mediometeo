@@ -1,17 +1,16 @@
-const CACHE_NAME = "mediometeo-genova-v3.0";
-const LEGACY_TAG = "mediometeo-genova-v1";
+const CACHE_NAME = "mediometeo-genova-v4.0";
 const STATIC_ASSETS = [
   "/",
-  "/static/styles.css?v=3.0",
-  "/static/app.js?v=3.0",
-  "/static/js/state.js?v=3.0",
-  "/static/js/api.js?v=3.0",
-  "/static/js/charts.js?v=3.0",
-  "/static/js/security.js?v=3.0",
-  "/static/js/icons.js?v=3.0",
-  "/static/vendor/leaflet.css?v=3.0",
-  "/static/vendor/leaflet.js?v=3.0",
-  "/static/vendor/chart.umd.min.js?v=3.0",
+  "/static/styles.css?v=4.0",
+  "/static/app.js?v=4.0",
+  "/static/js/state.js?v=4.0",
+  "/static/js/api.js?v=4.0",
+  "/static/js/charts.js?v=4.0",
+  "/static/js/security.js?v=4.0",
+  "/static/js/icons.js?v=4.0",
+  "/static/vendor/leaflet.css?v=4.0",
+  "/static/vendor/leaflet.js?v=4.0",
+  "/static/vendor/chart.umd.min.js?v=4.0",
   "/manifest.json"
 ];
 

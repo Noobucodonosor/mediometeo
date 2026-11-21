@@ -1,519 +1,247 @@
 <!DOCTYPE html>
-<html lang="it" data-radius="sharp">
+<html lang="it" data-theme="light">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- MANDATORY per modern-web-guidance (dark-mode): Declare support for dark and light themes -->
-  <meta name="color-scheme" content="dark light">
-  <meta name="theme-color" content="#0a0d14">
-  <meta name="page-type" content="software">
-  <meta name="site-kind" content="software">
-  <title>MedioMeteo Genova — Sala operativa Terra e Mare</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f8fafc">
+  <title>MedioMeteo Genova — Mappa Live Terra e Mare</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wdth,wght@85..100,400..700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/vendor/leaflet.css?v=3.0" />
-  <link rel="stylesheet" href="/static/styles.css?v=3.0">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/vendor/leaflet.css?v=4.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=4.0" />
 </head>
 <body>
-  <!-- 1. Topbar compatta con selettore località unificato e toolbar operativa -->
-  <header class="topbar">
-    <div class="brand">
-      <div class="brand-badge" aria-hidden="true">MM</div>
-      <div class="brand-name">
-        <span class="brand-title">MedioMeteo</span>
-        <span class="brand-region">Genova</span>
-      </div>
-    </div>
+  <main class="viewport-stage">
+    <!-- 1. Mappa Full-Screen 100dvh x 100vw -->
+    <div id="genova-map" class="map-canvas" role="application" aria-label="Mappa interattiva Genova e Mar Ligure"></div>
 
-    <!-- Selettore località unificato (ricerca + categoria + preferiti in unico popover) -->
-    <div class="loc-picker-wrap">
-      <div class="loc-picker-trigger-row">
-        <button
-          id="loc-picker-btn"
-          type="button"
-          class="loc-picker-btn"
-          aria-haspopup="dialog"
-          aria-expanded="false"
-          aria-label="Seleziona località Provincia di Genova"
-        >
-          <span id="loc-picker-label" class="loc-picker-label">Genova</span>
-          <span id="loc-picker-meta" class="loc-picker-meta">Comune</span>
-          <svg class="ui-chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M3 4.5L6 7.5L9 4.5"/>
-          </svg>
-        </button>
-        <button
-          id="btn-toggle-fav"
-          type="button"
-          class="btn-action fav-toggle-btn"
-          aria-pressed="false"
-          aria-label="Salva o rimuovi località dai preferiti"
-          title="Salva o rimuovi dai preferiti"
-        >
-          <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true">
+    <!-- 2. Top-Left: Unica pillola ricerca flottante + preferiti 1-tap -->
+    <div class="search-dock">
+      <div class="search-pill glass-panel">
+        <span class="search-icon" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>
+        </span>
+        <input
+          id="loc-search-input"
+          type="search"
+          class="search-input"
+          placeholder="Cerca Genova, Portofino, una rada..."
+          aria-label="Cerca località Provincia di Genova"
+          autocomplete="off"
+        />
+        <button id="btn-toggle-fav" type="button" class="pill-icon-btn" aria-pressed="false" title="Salva nei preferiti" aria-label="Salva località nei preferiti">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true">
             <polygon points="8,1.8 9.9,5.7 14.2,6.3 11.1,9.3 11.8,13.6 8,11.6 4.2,13.6 4.9,9.3 1.8,6.3 6.1,5.7"/>
           </svg>
         </button>
+        <button id="btn-gps" type="button" class="pill-icon-btn" title="Usa posizione GPS" aria-label="Centra sulla tua posizione GPS">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+            <circle cx="8" cy="8" r="3.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2"/>
+          </svg>
+        </button>
       </div>
 
-      <div id="loc-picker-panel" class="loc-picker-panel" role="dialog" aria-label="Cerca località" hidden>
-        <div id="fav-chips-bar" class="fav-chips-bar" aria-label="Preferiti 1-tap"></div>
-        <div class="loc-picker-search-row">
-          <input
-            id="loc-search-input"
-            type="search"
-            class="loc-picker-search"
-            placeholder="Cerca comune, quartiere, rada o valico..."
-            aria-label="Cerca tra 118 località della Provincia di Genova"
-            autocomplete="off"
-          />
-        </div>
-        <div class="loc-picker-chips" role="group" aria-label="Filtra categoria geografica">
-          <button type="button" class="loc-chip" data-loc-type="" aria-pressed="true">Tutte (118)</button>
+      <div id="loc-picker-panel" class="loc-dropdown glass-panel" role="dialog" aria-label="Suggerimenti e preferiti" hidden>
+        <div id="fav-chips-bar" class="fav-chips-bar" aria-label="Preferiti rapidi"></div>
+        <div class="loc-type-chips" role="group" aria-label="Filtra categoria">
+          <button type="button" class="loc-chip active" data-loc-type="" aria-pressed="true">Tutte</button>
           <button type="button" class="loc-chip" data-loc-type="comune" aria-pressed="false">Comuni</button>
           <button type="button" class="loc-chip" data-loc-type="quartiere" aria-pressed="false">Quartieri</button>
-          <button type="button" class="loc-chip" data-loc-type="rada_porto" aria-pressed="false">Rade e porti</button>
+          <button type="button" class="loc-chip" data-loc-type="rada_porto" aria-pressed="false">Rade</button>
           <button type="button" class="loc-chip" data-loc-type="valico" aria-pressed="false">Valichi</button>
         </div>
-        <div id="loc-picker-list" class="loc-picker-list" role="listbox" aria-label="Elenco località"></div>
+        <div id="loc-picker-list" class="loc-dropdown-list" role="listbox" aria-label="Elenco località"></div>
       </div>
-
-      <!-- Controlli nativi sincronizzati per compatibilità test e script -->
-      <select id="loc-type-filter" class="sr-only" tabindex="-1" aria-hidden="true">
-        <option value="">Tutte (118)</option>
-        <option value="comune">67 Comuni</option>
-        <option value="quartiere">25 Quartieri GE</option>
-        <option value="rada_porto">20 Rade e porti</option>
-        <option value="valico">6 Valichi</option>
-      </select>
-      <select id="district-select" class="sr-only" tabindex="-1" aria-hidden="true">
-        <option value="COM-GENOVA">Genova</option>
-      </select>
     </div>
 
-    <!-- Toolbar operativa (single tab stop via focusgroup / roving tabindex) -->
-    <div class="controls-bar" role="toolbar" focusgroup="toolbar wrap" aria-label="Controlli operativi">
-      <div class="mode-switch" role="group" aria-label="Modalità operativa">
-        <button id="btn-mode-land" type="button" class="mode-btn active-land" aria-pressed="true">Terra</button>
-        <button id="btn-mode-sea" type="button" class="mode-btn" aria-pressed="false">Mare</button>
-      </div>
-      <span class="toolbar-sep" role="separator" aria-orientation="vertical"></span>
-      <button id="btn-gps" type="button" class="btn-action" title="Centra sulla tua posizione GPS">Posizione</button>
-      <button id="btn-refresh" type="button" class="btn-action" title="Aggiorna sensori OMIRL e modelli in tempo reale">Aggiorna</button>
-      <a href="/orologio" class="btn-action" title="Apri vista smartwatch da polso">Orologio</a>
-    </div>
-  </header>
+    <!-- 3. Top-Center: Watch Banner condizionale (visibile solo in allerta / convergenza alta) -->
+    <div id="liguria-watch-banner" class="watch-banner glass-panel" hidden role="status"></div>
 
-  <!-- 2. Striscia di telemetria live ("Always-On Telemetry HUD") — matrice 1px piatta -->
-  <section class="telemetry-hud" aria-live="polite" aria-label="Telemetria in tempo reale della località selezionata">
-    <div class="hud-loc-block">
-      <div class="hud-loc-head">
-        <strong id="banner-district-name" class="hud-loc-title">Genova</strong>
-        <span id="banner-zone-tag" class="badge-pill level-green">Zona B</span>
-        <span id="banner-type-tag" class="hud-loc-meta">Comune</span>
+    <!-- 4. Right Rail stile Windy: 1 solo layer attivo alla volta + Rotta + Tema + Orologio -->
+    <aside id="layer-rail" class="layer-rail glass-panel" aria-label="Livelli mappa e strumenti">
+      <div class="rail-group" role="radiogroup" aria-label="Livello mappa attivo">
+        <button type="button" class="rail-btn active" data-layer="wind" aria-pressed="true" title="Vento">
+          <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 6h8.5a2 2 0 1 0-2-2"/><path d="M2 10h10.5a2 2 0 1 1-2 2"/><path d="M2 8h6"/></svg>
+          <span>Vento</span>
+        </button>
+        <button type="button" class="rail-btn" data-layer="radar" aria-pressed="false" title="Pioggia Radar">
+          <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 9.5h8a2.5 2.5 0 0 0 .3-5A3.5 3.5 0 0 0 5.6 3.8 2.8 2.8 0 0 0 4 9.5z"/><path d="M5.5 11.8l-.8 2M8.5 11.8l-.8 2M11.5 11.8l-.8 2"/></svg>
+          <span>Radar</span>
+        </button>
+        <button type="button" class="rail-btn" data-layer="waves" aria-pressed="false" title="Onde e Mare">
+          <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1.5 6.5c1.5-1.5 3-1.5 4.5 0s3 1.5 4.5 0 3-1.5 4.5 0"/><path d="M1.5 10.5c1.5-1.5 3-1.5 4.5 0s3 1.5 4.5 0 3-1.5 4.5 0"/></svg>
+          <span>Onde</span>
+        </button>
+        <button type="button" class="rail-btn" data-layer="stations" aria-pressed="false" title="Stazioni OMIRL e Idrometri">
+          <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 13V6"/><circle cx="8" cy="5" r="1.5"/><path d="M4.8 7.8a4.5 4.5 0 0 1 0-5.6M11.2 2.2a4.5 4.5 0 0 1 0 5.6"/></svg>
+          <span>Stazioni</span>
+        </button>
       </div>
-      <p id="banner-microclimate" class="hud-loc-sub pretty-copy">
-        Seleziona un punto sulla mappa live per leggere i sensori OMIRL e la fisica locale.
-      </p>
+
+      <div class="rail-divider" aria-hidden="true"></div>
+
+      <button id="btn-open-route" type="button" class="rail-btn" aria-expanded="false" title="Pianifica Rotta Costiera">
+        <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="4" cy="12" r="2"/><circle cx="12" cy="4" r="2"/><path d="M5.5 10.5C8 9 8 7 10.5 5.5"/></svg>
+        <span>Rotta</span>
+      </button>
+      <button id="btn-toggle-theme" type="button" class="rail-btn" title="Cambia tema Chiaro / Scuro">
+        <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3.2"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1"/></svg>
+        <span id="theme-label">Scuro</span>
+      </button>
+      <a href="/orologio" class="rail-btn" title="Vista Smartwatch / Plancia">
+        <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.2"/></svg>
+        <span>Orologio</span>
+      </a>
+    </aside>
+
+    <!-- 5. Radar Player compatto (visibile solo quando è attivo il layer Radar) -->
+    <div id="radar-bar" class="radar-bar glass-panel" hidden>
+      <button id="btn-radar-play" type="button" class="btn-mini">Play</button>
+      <input id="radar-frame-slider" type="range" min="0" max="0" value="0" class="radar-slider" aria-label="Timeline radar" />
+      <span id="radar-time-label" class="radar-time">Live</span>
     </div>
 
-    <div class="hud-metrics-strip">
-      <div class="hud-metric" id="hud-cell-temp">
-        <span class="hud-m-label">Temperatura</span>
-        <strong id="hud-val-temp" class="hud-m-val">--°C</strong>
-        <span id="hud-sub-temp" class="hud-m-sub">--</span>
+    <!-- 6. Pannello flottante Rotta Costiera (traccia direttamente sulla mappa) -->
+    <section id="route-panel" class="route-panel glass-panel" hidden aria-label="Calcolatore rotta costiera">
+      <div class="route-panel-head">
+        <strong>Rotta Costiera &amp; AMP Portofino</strong>
+        <button id="btn-close-route" type="button" class="pill-icon-btn" aria-label="Chiudi rotta">✕</button>
       </div>
-      <div class="hud-metric" id="hud-cell-wind">
-        <span class="hud-m-label">Vento</span>
-        <strong id="hud-val-wind" class="hud-m-val">-- kt</strong>
-        <span id="hud-sub-wind" class="hud-m-sub">--</span>
-      </div>
-      <div class="hud-metric" id="hud-cell-wave" hidden>
-        <span class="hud-m-label">Moto ondoso</span>
-        <strong id="hud-val-wave" class="hud-m-val">-- m</strong>
-        <span id="hud-sub-wave" class="hud-m-sub">--</span>
-      </div>
-      <div class="hud-metric" id="hud-cell-rain">
-        <span class="hud-m-label" id="hud-lbl-rain">Pioggia 1h</span>
-        <strong id="hud-val-rain" class="hud-m-val">-- mm/h</strong>
-        <span id="hud-sub-rain" class="hud-m-sub">--</span>
-      </div>
-      <div class="hud-metric" id="hud-cell-press">
-        <span class="hud-m-label">Pressione</span>
-        <strong id="hud-val-press" class="hud-m-val">---- hPa</strong>
-        <div class="hud-metric-badges">
-          <span id="badge-convergence" class="badge-pill level-green">Conv: --</span>
-          <span id="badge-confidence" class="badge-pill level-green">5 Mod: --%</span>
-          <span id="timestamp-badge" class="hud-timestamp">--:--</span>
+      <div class="route-panel-grid">
+        <label class="field-compact">
+          <span>Partenza</span>
+          <select id="route-origin" class="compact-input"></select>
+        </label>
+        <label class="field-compact">
+          <span>Destinazione</span>
+          <select id="route-dest" class="compact-input"></select>
+        </label>
+        <label class="field-compact">
+          <span>Crociera (kt)</span>
+          <input id="route-speed" type="number" min="1" max="40" step="0.5" value="6.0" class="compact-input" />
+        </label>
+        <label class="field-compact">
+          <span>Durata A+R (min)</span>
+          <input id="route-duration" type="number" min="20" max="600" step="10" value="90" class="compact-input" />
+        </label>
+        <label class="field-compact">
+          <span>Sosta (min)</span>
+          <input id="route-stop" type="number" min="0" max="240" step="5" value="20" class="compact-input" />
+        </label>
+        <div class="field-compact field-btn-wrap">
+          <button id="btn-calc-route" type="button" class="btn-primary-pill">Traccia su mappa</button>
         </div>
       </div>
-    </div>
-  </section>
+      <div id="route-results-grid" class="route-kpi-strip"></div>
+      <div id="route-legs-list" class="route-legs-list"></div>
+    </section>
 
-  <div id="liguria-watch-banner" class="watch-banner" hidden role="status"></div>
-
-  <!-- 3. Barra tab lineare singola (default all'avvio: Mappa) -->
-  <nav class="tabs-bar-wrap" aria-label="Sezioni MedioMeteo Genova">
-    <div class="tabs-nav scroller" role="tablist" focusgroup="tablist nomemory" aria-label="Viste principali">
-      <button type="button" class="tab-btn active" role="tab" aria-selected="true" focusgroupstart data-tab="tab-mappa" id="btn-tab-mappa">
-        Mappa
-      </button>
-      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-adesso" id="btn-tab-adesso">
-        Adesso
-      </button>
-      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-nowcast" id="btn-tab-nowcast">
-        Nowcast 3h
-      </button>
-      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-modelli" id="btn-tab-modelli">
-        Modelli
-      </button>
-      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-rotta" id="btn-tab-rotta">
-        Rotta
-      </button>
-      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="tab-bollettini" id="btn-tab-bollettini">
-        Bollettini
-      </button>
-    </div>
-  </nav>
-
-  <main id="top" class="container">
-    <!-- ======================================================================
-         SCHEDA: Adesso
-         ====================================================================== -->
-    <section id="tab-adesso" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-adesso" hidden>
-      <div class="hero-adesso-grid">
-        <article class="card">
-          <div class="card-header">
-            <div>
-              <h2 class="card-title" id="hero-kpi-title">Diagnostica locale</h2>
-              <div id="main-weather-desc" class="card-subtitle">--</div>
-              <div id="pressure-trend" class="hero-pressure-trend">Tendenza barica 3h: --</div>
-            </div>
-            <button type="button" id="btn-adesso-to-map" class="btn-action">
-              Torna alla mappa
+    <!-- 7. Bottom Sheet Progressivo a 3 Livelli (peek | medium | expanded) -->
+    <section id="bottom-sheet" class="bottom-sheet glass-panel" data-state="medium" aria-live="polite" aria-label="Scheda meteo locale">
+      <div id="sheet-handle-row" class="sheet-header">
+        <div class="sheet-drag-bar" aria-hidden="true"></div>
+        <div class="sheet-header-main">
+          <div class="sheet-title-group">
+            <h1 id="sheet-peek-title" class="sheet-title">Genova</h1>
+            <span id="sheet-mode-badge" class="mode-pill">Terra</span>
+            <span id="sheet-peek-summary" class="sheet-peek-summary">--°C · -- kt</span>
+          </div>
+          <div class="sheet-header-actions">
+            <button id="btn-sheet-refresh" type="button" class="pill-icon-btn" title="Aggiorna dati" aria-label="Aggiorna dati live">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.4-3.7"/><path d="M13.5 2.5v3h-3"/></svg>
             </button>
+            <button id="btn-sheet-expand" type="button" class="btn-expand" aria-label="Espandi o comprimi pannello">Dettagli</button>
           </div>
-
-          <div id="kpi-dynamic-grid" class="kpi-grid"></div>
-
-          <div id="wind-local-note" class="wind-note-box">
-            Caricamento diagnostica vento locale...
-          </div>
-        </article>
-
-        <article class="card compass-card">
-          <div class="card-header">
-            <h2 class="card-title">Rosa dei venti e geometria rada</h2>
-            <span class="card-meta-note" id="compass-bay-badge">Rosa ligure</span>
-          </div>
-          <div id="svg-nautical-compass" class="svg-compass-container"></div>
-          <div id="compass-legend" class="compass-legend-line"></div>
-        </article>
+        </div>
       </div>
 
-      <div class="dual-grid">
-        <article class="card">
-          <div class="card-header">
-            <h2 class="card-title">Stazioni OMIRL vicine</h2>
-            <span class="card-meta-note">Dati misurati</span>
+      <div class="sheet-scroll">
+        <!-- LIVELLO MEDIO: Sintesi umana 2 frasi + 4 metriche + Timeline 24h + AI Ask -->
+        <div class="sheet-medium">
+          <p id="ai-short-summary" class="ai-short-summary">Caricamento analisi locale...</p>
+
+          <div id="sheet-metrics-grid" class="metrics-row"></div>
+
+          <div class="hourly-wrap">
+            <div id="hourly-strip" class="hourly-strip" role="list" aria-label="Previsione oraria prossime 24 ore"></div>
           </div>
-          <div id="omirl-stations-grid" class="stations-grid"></div>
-        </article>
 
-        <article class="card">
-          <div class="card-header">
-            <h2 class="card-title">Livelli idrometrici</h2>
-            <span class="card-meta-note">24 idrometri live</span>
-          </div>
-          <div id="omirl-hydrometers-grid" class="stations-grid"></div>
-        </article>
-      </div>
-
-      <article class="card">
-        <div class="card-header">
-          <h2 class="card-title">Webcam e visuali costiere</h2>
-          <span class="card-meta-note">Rete osservativa OMIRL e portali locali</span>
-        </div>
-        <div id="live-webcams-grid" class="webcam-grid"></div>
-      </article>
-    </section>
-
-    <!-- ======================================================================
-         SCHEDA: Nowcast 3h
-         ====================================================================== -->
-    <section id="tab-nowcast" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-nowcast" hidden>
-      <article class="card">
-        <div class="card-header">
-          <h2 class="card-title">Evoluzione a 3 ore (step 15 min)</h2>
-          <span class="card-meta-note">AROME HD 1.3 km + ICON-D2 2 km</span>
-        </div>
-        <div id="nowcast-15m-strip" class="nowcast-strip"></div>
-      </article>
-
-      <div class="dual-grid">
-        <article class="card" id="panel-land-details">
-          <div class="card-header">
-            <h2 class="card-title">Indicatori operativi Terra</h2>
-            <span id="land-overall-badge" class="badge-pill level-green">Regolare</span>
-          </div>
-          <div id="land-risk-items" class="risk-list"></div>
-        </article>
-
-        <article class="card" id="panel-sea-details">
-          <div class="card-header">
-            <h2 class="card-title">Fisica costiera e stato del mare</h2>
-            <span id="sea-overall-badge" class="card-meta-note">Parametri fisici</span>
-          </div>
-          <div id="sea-risk-items" class="risk-list"></div>
-        </article>
-      </div>
-    </section>
-
-    <!-- ======================================================================
-         SCHEDA: Mappa (attiva all'avvio)
-         ====================================================================== -->
-    <section id="tab-mappa" class="tab-panel active" role="tabpanel" aria-labelledby="btn-tab-mappa">
-      <article class="map-stage-card">
-        <div class="map-floating-top">
-          <div class="map-layers-pills" role="group" aria-label="Livelli mappa">
-            <button id="btn-toggle-radar" type="button" class="map-pill active" aria-pressed="true">Radar</button>
-            <button id="btn-toggle-omirl" type="button" class="map-pill active" aria-pressed="true">OMIRL</button>
-            <button id="btn-toggle-webcams" type="button" class="map-pill" aria-pressed="false">Webcam</button>
-            <button id="btn-toggle-amp" type="button" class="map-pill active" aria-pressed="true">AMP</button>
-          </div>
+          <form id="ask-form" class="ask-bar">
+            <input
+              id="ask-input"
+              type="text"
+              class="ask-input"
+              maxlength="240"
+              placeholder="Chiedi qualcosa su questo punto (es. piove stasera? com'è il mare alle 16?)..."
+              aria-label="Fai una domanda meteo su questo punto"
+            />
+            <button id="ask-submit" type="submit" class="btn-primary-pill">Chiedi</button>
+          </form>
+          <div id="ask-answer" class="ask-answer" hidden></div>
         </div>
 
-        <div id="genova-map" role="application" aria-label="Mappa interattiva Provincia di Genova e Golfo Ligure"></div>
-
-        <aside id="map-inspector-drawer" class="map-inspector" hidden aria-label="Dettaglio punto selezionato">
-          <div class="map-inspector-head">
-            <div>
-              <strong id="inspector-title" class="map-inspector-title">--</strong>
-              <span id="inspector-meta" class="map-inspector-meta">--</span>
+        <!-- LIVELLO ESPANSO: 5 Modelli, Grafici, Stazioni OMIRL, Idrometri & ARPAL -->
+        <div class="sheet-expanded">
+          <div class="exp-section">
+            <div class="exp-head">
+              <h2>Confronto 5 Modelli (AROME · ICON-D2 · ECMWF · GFS · MET.no)</h2>
+              <div id="models-divergence-summary" class="divergence-pill">--</div>
             </div>
-            <button type="button" id="btn-inspector-close" class="btn-action map-inspector-close" aria-label="Chiudi dettaglio">✕</button>
-          </div>
-          <div id="inspector-metrics" class="map-inspector-metrics"></div>
-          <div id="inspector-chart-slot" class="map-inspector-chart-slot"></div>
-          <div class="map-inspector-actions">
-            <button type="button" id="btn-inspector-open-adesso" class="btn-action btn-primary-action">Apri scheda Adesso</button>
-          </div>
-        </aside>
-
-        <div class="map-floating-bottom">
-          <div class="radar-player-controls">
-            <button id="btn-radar-play" type="button" class="btn-action">Play radar</button>
-            <span id="radar-time-label" class="radar-time-label">Radar live</span>
-          </div>
-          <input
-            id="radar-frame-slider"
-            type="range"
-            min="0"
-            max="0"
-            value="0"
-            class="radar-slider"
-            aria-label="Timeline frame radar precipitazioni"
-          />
-          <span id="map-coords-label" class="map-coords-label">44.4072°N, 8.9339°E</span>
-        </div>
-      </article>
-    </section>
-
-    <!-- ======================================================================
-         SCHEDA: Modelli
-         ====================================================================== -->
-    <section id="tab-modelli" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-modelli" hidden>
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:0.85rem;">
-        <div class="mode-switch" role="group" aria-label="Vista modelli">
-          <button type="button" class="mode-btn modelli-subtab-btn active" data-modelli-pane="modelli-pane-charts" aria-pressed="true">Meteogrammi</button>
-          <button type="button" class="mode-btn modelli-subtab-btn" data-modelli-pane="modelli-pane-table" aria-pressed="false">Confronto 5 modelli</button>
-          <button type="button" class="mode-btn modelli-subtab-btn" data-modelli-pane="modelli-pane-7d" aria-pressed="false">7 giorni</button>
-        </div>
-        <div id="models-divergence-summary" class="divergence-summary"></div>
-      </div>
-
-      <div id="modelli-pane-charts" class="charts-grid">
-        <article class="card">
-          <div class="card-header">
-            <h2 class="card-title">Meteogramma pioggia e temperatura</h2>
-            <span class="card-meta-note">AROME / ICON-D2 / ECMWF</span>
-          </div>
-          <div class="chart-wrapper">
-            <canvas id="chart-multimodel"></canvas>
-          </div>
-        </article>
-
-        <article class="card">
-          <div class="card-header">
-            <h2 class="card-title">Meteogramma vento e moto ondoso</h2>
-            <span class="card-meta-note">Vento, raffiche, Hs e Hmax</span>
-          </div>
-          <div class="chart-wrapper">
-            <canvas id="chart-wind-wave"></canvas>
-          </div>
-        </article>
-      </div>
-
-      <article id="modelli-pane-table" class="card" hidden>
-        <div class="card-header">
-          <h2 class="card-title">Confronto orario 5 modelli (24h)</h2>
-          <span class="card-meta-note">AROME 1.3km • ICON-D2 2km • ECMWF 9km • GFS • MET.no</span>
-        </div>
-        <div class="table-responsive">
-          <table class="forecast-table">
-            <thead>
-              <tr>
-                <th>Ora</th>
-                <th>Consenso vento (kt | km/h)</th>
-                <th>AROME 1.3km</th>
-                <th>ICON-D2 2km</th>
-                <th>ECMWF 9km</th>
-                <th>GFS Global</th>
-                <th>MET Norway</th>
-                <th>Spread Δ vento</th>
-                <th>Pioggia (mm)</th>
-                <th>Onda Hs / Hmax @ Tp</th>
-                <th>Risacca riva</th>
-              </tr>
-            </thead>
-            <tbody id="models-5-hourly-tbody"></tbody>
-          </table>
-        </div>
-      </article>
-
-      <article id="modelli-pane-7d" class="card" hidden>
-        <div class="card-header">
-          <h2 class="card-title">Previsione a 7 giorni</h2>
-          <span class="card-meta-note">Ensemble 5 modelli + Open-Meteo Marine</span>
-        </div>
-        <div class="table-responsive">
-          <table class="forecast-table">
-            <thead>
-              <tr>
-                <th>Giorno</th>
-                <th>Condizioni</th>
-                <th>Temp min / max</th>
-                <th>Pioggia (media / picco LAM)</th>
-                <th>Vento dominante</th>
-                <th>Raffica max (km/h | kt)</th>
-                <th>Mare max (Hs / Hmax @ Tp)</th>
-              </tr>
-            </thead>
-            <tbody id="daily-7d-tbody"></tbody>
-          </table>
-        </div>
-      </article>
-    </section>
-
-    <!-- ======================================================================
-         SCHEDA: Rotta
-         ====================================================================== -->
-    <section id="tab-rotta" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-rotta" hidden>
-      <article class="card">
-        <div class="card-header">
-          <div>
-            <h2 class="card-title">Pianificatore di rotta costiera</h2>
-            <p class="card-subtitle">
-              Grafo nautico costiero con limiti di velocità dell'Area Marina Protetta di Portofino (Zona A vietata, Zona B 5 kt, Zona C 7 kt).
-            </p>
-          </div>
-          <a href="/orologio" class="btn-action">Apri orologio (/orologio)</a>
-        </div>
-
-        <div class="route-split-grid">
-          <div class="route-form-grid">
-            <div class="form-field">
-              <label for="route-origin">Partenza</label>
-              <select id="route-origin" class="form-input"></select>
+            <div class="charts-grid">
+              <div class="chart-card"><canvas id="chart-multimodel"></canvas></div>
+              <div class="chart-card"><canvas id="chart-wind-wave"></canvas></div>
             </div>
-            <div class="form-field">
-              <label for="route-dest">Destinazione</label>
-              <select id="route-dest" class="form-input"></select>
-            </div>
-            <div class="form-field">
-              <label for="route-speed">Velocità crociera (kt)</label>
-              <input id="route-speed" type="number" min="1" max="40" step="0.5" value="6.0" class="form-input" />
-            </div>
-            <div class="form-field">
-              <label for="route-duration">Durata uscita (min)</label>
-              <input id="route-duration" type="number" min="20" max="600" step="10" value="90" class="form-input" />
-            </div>
-            <div class="form-field">
-              <label for="route-stop">Sosta in cala (min)</label>
-              <input id="route-stop" type="number" min="0" max="240" step="5" value="20" class="form-input" />
-            </div>
-            <div class="form-field">
-              <button id="btn-calc-route" type="button" class="btn-action btn-primary-action">
-                Calcola rotta ed ETA
-              </button>
+            <div class="table-wrap">
+              <table class="models-table">
+                <thead>
+                  <tr>
+                    <th>Ora</th>
+                    <th>Consenso</th>
+                    <th>AROME</th>
+                    <th>ICON-D2</th>
+                    <th>ECMWF</th>
+                    <th>GFS</th>
+                    <th>MET.no</th>
+                    <th>Δ</th>
+                    <th>Pioggia</th>
+                    <th>Onda</th>
+                  </tr>
+                </thead>
+                <tbody id="models-5-hourly-tbody"></tbody>
+              </table>
             </div>
           </div>
 
-          <div class="route-output-col">
-            <div id="route-results-grid" class="kpi-grid" style="margin-top: 0;"></div>
-            <div id="route-legs-list" class="risk-list" style="margin-top: 0.9rem;"></div>
-          </div>
-        </div>
-      </article>
-    </section>
-
-    <!-- ======================================================================
-         SCHEDA: Bollettini
-         ====================================================================== -->
-    <section id="tab-bollettini" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-bollettini" hidden>
-      <article class="card">
-        <div class="card-header">
-          <h2 class="card-title">Analisi sinottica</h2>
-          <span id="ai-engine-badge" class="card-meta-note">Motore sinottico ligure</span>
-        </div>
-        <h3 id="ai-headline" class="ai-headline">--</h3>
-        <p id="ai-synoptic-body" class="pretty-copy ai-synoptic-body"></p>
-        <div id="ai-takeaways-grid" class="ai-takeaways"></div>
-      </article>
-
-      <div class="dual-grid">
-        <article class="card">
-          <div class="card-header">
-            <h2 class="card-title">Bollettino ARPAL Liguria</h2>
-            <span id="arpal-issued-badge" class="card-meta-note">ARPAL</span>
-          </div>
-          <div id="arpal-bulletin-box" class="risk-list"></div>
-        </article>
-
-        <article class="card">
-          <div class="card-header">
-            <h2 class="card-title">Meteomar Mar Ligure e soccorso</h2>
-            <span class="card-meta-note">VHF Ch 16 / 1530</span>
-          </div>
-          <div class="risk-list">
-            <div class="risk-item border-physics">
-              <div class="risk-item-title">Testo integrale Meteomar Mar Ligure</div>
-              <div id="meteomar-text" class="risk-item-desc">--</div>
+          <div class="exp-grid-2">
+            <div class="exp-section">
+              <h2>Stazioni OMIRL vicine</h2>
+              <div id="omirl-stations-grid" class="obs-list"></div>
             </div>
-            <div class="risk-item border-green">
-              <div class="risk-item-title">Contatti ufficiali soccorso in mare</div>
-              <div class="risk-item-desc">
-                • <strong>Guardia Costiera Emergenza:</strong> 1530 (Numero Blu gratuito)<br>
-                • <strong>Ascolto Radio Nautico:</strong> Canale 16 VHF (156.8 MHz)<br>
-                • <strong>Capitaneria di Porto di Genova:</strong> +39 010 27771
-              </div>
+            <div class="exp-section">
+              <h2>Idrometri torrenti</h2>
+              <div id="omirl-hydrometers-grid" class="obs-list"></div>
             </div>
           </div>
-        </article>
+
+          <div class="exp-section">
+            <h2>Bollettino Ufficiale ARPAL Liguria</h2>
+            <div id="arpal-bulletin-box" class="arpal-list"></div>
+          </div>
+
+          <footer class="sheet-disclaimers">
+            <div id="disclaimer-land-text"></div>
+            <div id="disclaimer-sea-text"></div>
+          </footer>
+        </div>
       </div>
     </section>
-
-    <!-- Disclaimer ufficiali di sicurezza (ADR-0002) -->
-    <footer class="footer-disclaimer">
-      <div id="disclaimer-land-text"></div>
-      <div id="disclaimer-sea-text"></div>
-    </footer>
   </main>
 
-  <script src="/static/vendor/leaflet.js?v=3.0"></script>
-  <script src="/static/vendor/chart.umd.min.js?v=3.0"></script>
-  <script type="module" src="/static/app.js?v=3.0"></script>
+  <script src="/static/vendor/leaflet.js?v=4.0"></script>
+  <script src="/static/vendor/chart.umd.min.js?v=4.0"></script>
+  <script type="module" src="/static/app.js?v=4.0"></script>
 </body>
 </html>
