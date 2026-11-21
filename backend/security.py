@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import defaultdict, deque
+import time
 from typing import Any
 from fastapi import HTTPException
 from backend.config import get_settings
@@ -47,3 +49,62 @@ def sanitize_metadata(meta: dict[str, Any]) -> dict[str, Any]:
             continue
         cleaned[k] = v
     return cleaned
+
+
+class SlidingWindowRateLimiter:
+    """Rate limiter in-memory a finestra scorrevole per protezione quote API e anti-abuso (ADR-0011)."""
+
+    def __init__(self, max_requests: int = 15, window_seconds: float = 60.0) -> None:
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self._hits: dict[str, deque[float]] = defaultdict(deque)
+
+    def check(self, key: str) -> None:
+        now = time.monotonic()
+        cutoff = now - self.window_seconds
+        bucket = self._hits[key]
+        while bucket and bucket[0] < cutoff:
+            bucket.popleft()
+        if len(bucket) >= self.max_requests:
+            raise HTTPException(
+                status_code=429,
+                detail="Troppe richieste ravvicinate. Riprova tra qualche secondo.",
+            )
+        bucket.append(now)
+
+    def reset(self) -> None:
+        self._hits.clear()
+
+
+class CircuitBreaker:
+    """Circuit Breaker per connettori meteo esterni (N=3 fallimenti -> cooldown T=5 min, ADR-0002)."""
+
+    def __init__(self, failure_threshold: int = 3, cooldown_seconds: float = 300.0) -> None:
+        self.failure_threshold = failure_threshold
+        self.cooldown_seconds = cooldown_seconds
+        self._failures: dict[str, int] = defaultdict(int)
+        self._open_until: dict[str, float] = {}
+
+    def is_open(self, source: str) -> bool:
+        until = self._open_until.get(source, 0.0)
+        if until <= 0.0:
+            return False
+        if time.monotonic() >= until:
+            # Half-open: consente un nuovo tentativo dopo il cooldown
+            self._open_until.pop(source, None)
+            self._failures[source] = 0
+            return False
+        return True
+
+    def record_success(self, source: str) -> None:
+        self._failures[source] = 0
+        self._open_until.pop(source, None)
+
+    def record_failure(self, source: str) -> None:
+        self._failures[source] += 1
+        if self._failures[source] >= self.failure_threshold:
+            self._open_until[source] = time.monotonic() + self.cooldown_seconds
+
+    def reset(self) -> None:
+        self._failures.clear()
+        self._open_until.clear()

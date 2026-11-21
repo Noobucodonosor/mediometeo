@@ -24,6 +24,7 @@ METNO_COMPACT_URL = "https://api.met.no/weatherapi/locationforecast/2.0/compact"
 
 # Cache in-memory di breve durata (120s) per l'intero parco sensori regionale OMIRL
 _OMIRL_BULK_CACHE: dict[str, Any] = {"ts": 0.0, "payload": None}
+_OMIRL_BULK_LOCK = asyncio.Lock()
 
 # Mappa bacini e soglie idrometriche ufficiali di riferimento per i 24 idrometri della Provincia di Genova
 GENOVA_HYDROMETERS_META: dict[str, dict[str, Any]] = {
@@ -372,33 +373,38 @@ async def fetch_arpal_official_bulletins(client: httpx.AsyncClient) -> dict[str,
 
 
 async def _fetch_omirl_regional_bulk(client: httpx.AsyncClient) -> dict[str, list[dict[str, Any]]]:
-    """Scarica in parallelo i 6 endpoint bulk di OMIRL Regione Liguria con cache di 120s."""
+    """Scarica in parallelo i 6 endpoint bulk di OMIRL Regione Liguria con cache di 120s e lock single-flight."""
     now_ts = time.time()
     if _OMIRL_BULK_CACHE["payload"] and (now_ts - _OMIRL_BULK_CACHE["ts"] < 120.0):
         return _OMIRL_BULK_CACHE["payload"]
 
-    headers = {
-        "Accept": "application/json",
-        "User-Agent": "MedioMeteoGenova/2.2 (Observational Network)",
-    }
-    sensor_types = ["Vento", "Termo", "Pluvio", "Idro", "Boa", "webcam"]
-    tasks = [client.get(f"{OMIRL_BASE_URL}/stations/{s}", headers=headers) for s in sensor_types]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    async with _OMIRL_BULK_LOCK:
+        now_ts = time.time()
+        if _OMIRL_BULK_CACHE["payload"] and (now_ts - _OMIRL_BULK_CACHE["ts"] < 120.0):
+            return _OMIRL_BULK_CACHE["payload"]
 
-    bulk: dict[str, list[dict[str, Any]]] = {s: [] for s in sensor_types}
-    for s_type, res in zip(sensor_types, results):
-        if isinstance(res, httpx.Response) and res.status_code == 200:
-            try:
-                arr = res.json()
-                if isinstance(arr, list):
-                    bulk[s_type] = arr
-            except Exception:
-                pass
+        headers = {
+            "Accept": "application/json",
+            "User-Agent": "MedioMeteoGenova/2.2 (Observational Network)",
+        }
+        sensor_types = ["Vento", "Termo", "Pluvio", "Idro", "Boa", "webcam"]
+        tasks = [client.get(f"{OMIRL_BASE_URL}/stations/{s}", headers=headers) for s in sensor_types]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    if any(bulk.values()):
-        _OMIRL_BULK_CACHE["ts"] = now_ts
-        _OMIRL_BULK_CACHE["payload"] = bulk
-    return bulk
+        bulk: dict[str, list[dict[str, Any]]] = {s: [] for s in sensor_types}
+        for s_type, res in zip(sensor_types, results):
+            if isinstance(res, httpx.Response) and res.status_code == 200:
+                try:
+                    arr = res.json()
+                    if isinstance(arr, list):
+                        bulk[s_type] = arr
+                except Exception:
+                    pass
+
+        if any(bulk.values()):
+            _OMIRL_BULK_CACHE["ts"] = time.time()
+            _OMIRL_BULK_CACHE["payload"] = bulk
+        return bulk
 
 
 async def fetch_omirl_station_chart(

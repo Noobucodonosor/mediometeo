@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -34,6 +35,7 @@ from backend.locations import (
 from backend.security import (
     SAFETY_DISCLAIMER_LAND,
     SAFETY_DISCLAIMER_SEA,
+    SlidingWindowRateLimiter,
     sanitize_metadata,
     validate_ligurian_coordinates,
 )
@@ -78,6 +80,18 @@ async def add_security_headers(request, call_next):
         "frame-ancestors 'none'",
     )
     return response
+
+
+_PKG_LOCKS: dict[str, asyncio.Lock] = {}
+_AI_RATE_LIMITER = SlidingWindowRateLimiter(max_requests=15, window_seconds=60.0)
+_REFRESH_RATE_LIMITER = SlidingWindowRateLimiter(max_requests=10, window_seconds=60.0)
+
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    if fwd:
+        return fwd
+    return request.client.host if request.client else "unknown"
 
 
 def _get_cache() -> SQLiteCache:
@@ -173,19 +187,29 @@ async def _load_or_compute_weather_package(
             payload["from_cache"] = True
             return payload
 
-    raw = await fetch_all_raw_sources(lat, lon, sea_lat, sea_lon)
+    lock = _PKG_LOCKS.setdefault(cache_key, asyncio.Lock())
+    async with lock:
+        if not force_refresh:
+            cached = cache.get(cache_key, allow_stale=False)
+            if cached:
+                payload = dict(cached.payload)
+                payload["data_age_seconds"] = cached.age_seconds
+                payload["from_cache"] = True
+                return payload
 
-    if not raw.get("multimodel"):
-        stale = cache.get(cache_key, allow_stale=True)
-        if stale:
-            payload = dict(stale.payload)
-            payload["is_stale"] = True
-            payload["stale_warning"] = (
-                "Dati serviti dalla cache di resilienza SQLite — connessione verso i provider esterni temporaneamente degradata."
-            )
-            payload["data_age_seconds"] = stale.age_seconds
-            payload["from_cache"] = True
-            return payload
+        raw = await fetch_all_raw_sources(lat, lon, sea_lat, sea_lon)
+
+        if not raw.get("multimodel"):
+            stale = cache.get(cache_key, allow_stale=True)
+            if stale:
+                payload = dict(stale.payload)
+                payload["is_stale"] = True
+                payload["stale_warning"] = (
+                    "Dati serviti dalla cache di resilienza SQLite — connessione verso i provider esterni temporaneamente degradata."
+                )
+                payload["data_age_seconds"] = stale.age_seconds
+                payload["from_cache"] = True
+                return payload
 
     pkg = build_complete_weather_package(
         district,
@@ -271,6 +295,7 @@ async def api_list_districts(
 
 @app.get("/api/v1/observations")
 async def api_get_observations(
+    request: Request,
     location: str | None = Query(default=None, description="ID località o Comune (es. COM-GENOVA, SEA-BAIA-DI-SAN-FRUTTUOSO)"),
     district: str | None = Query(default=None),
     lat: float | None = Query(default=None),
@@ -278,6 +303,8 @@ async def api_get_observations(
     refresh: bool = Query(default=False),
 ) -> dict[str, Any]:
     """Restituisce esclusivamente la verità osservativa (`1. ADESSO`): Stazioni reali OMIRL, Idrometri Torrenti e Webcam Live ordinate per distanza."""
+    if refresh:
+        _REFRESH_RATE_LIMITER.check(_client_ip(request))
     target = location or district
     d, loc_meta, custom_coords = _resolve_target(target, lat, lon)
     pkg = await _load_or_compute_weather_package(d, location_meta=loc_meta, custom_coords=custom_coords, force_refresh=refresh)
@@ -315,6 +342,7 @@ async def api_get_omirl_station_chart(
 
 @app.get("/api/v1/nowcast")
 async def api_get_nowcast(
+    request: Request,
     location: str | None = Query(default=None, description="ID località (67 Comuni, 25 Quartieri, 20 Rade, 6 Valichi)"),
     district: str | None = Query(default=None, description="ID distretto legacy"),
     lat: float | None = Query(default=None, description="Latitudine opzionale nel dominio Ligure"),
@@ -323,6 +351,8 @@ async def api_get_nowcast(
     refresh: bool = Query(default=False),
 ) -> dict[str, Any]:
     """Nowcasting ad alta frequenza (0-3 ore, step 15m, Sensori OMIRL, Radar RainViewer, Convergenza Ligure, Fisica Terra & Mare)."""
+    if refresh:
+        _REFRESH_RATE_LIMITER.check(_client_ip(request))
     target = location or district
     d, loc_meta, custom_coords = _resolve_target(target, lat, lon, mode=mode)
     pkg = await _load_or_compute_weather_package(d, location_meta=loc_meta, custom_coords=custom_coords, force_refresh=refresh)
@@ -346,6 +376,7 @@ async def api_get_nowcast(
 
 @app.get("/api/v1/forecast")
 async def api_get_forecast(
+    request: Request,
     location: str | None = Query(default=None, description="ID località (es. COM-GENOVA, COM-PORTOFINO, QRT-GENOVA-NERI)"),
     district: str | None = Query(default=None, description="ID distretto"),
     lat: float | None = Query(default=None, description="Latitudine opzionale nel dominio Ligure"),
@@ -354,6 +385,8 @@ async def api_get_forecast(
     refresh: bool = Query(default=False),
 ) -> dict[str, Any]:
     """Restituisce il pacchetto completo: Osservazioni Reali OMIRL + Nowcast 0-3h + Forecast 48h a 5 Modelli + 7 giorni."""
+    if refresh:
+        _REFRESH_RATE_LIMITER.check(_client_ip(request))
     target = location or district
     d, loc_meta, custom_coords = _resolve_target(target, lat, lon, mode=mode)
     pkg = await _load_or_compute_weather_package(d, location_meta=loc_meta, custom_coords=custom_coords, force_refresh=refresh)
@@ -362,6 +395,7 @@ async def api_get_forecast(
 
 @app.get("/api/v1/marine")
 async def api_get_marine(
+    request: Request,
     location: str | None = Query(default=None, description="ID rada/porto del Golfo di Genova"),
     district: str | None = Query(default="MARE-PORTO-DIGA", description="ID settore marino del Golfo di Genova"),
     lat: float | None = Query(default=None),
@@ -369,6 +403,8 @@ async def api_get_marine(
     refresh: bool = Query(default=False),
 ) -> dict[str, Any]:
     """Endpoint di Fisica Costiera e Marina Pura (Zero semafori soggettivi — Spettro d'onda, Maree, Risacca, Correnti)."""
+    if refresh:
+        _REFRESH_RATE_LIMITER.check(_client_ip(request))
     target = location or district
     d, loc_meta, custom_coords = _resolve_target(target, lat, lon, mode="sea")
     pkg = await _load_or_compute_weather_package(d, location_meta=loc_meta, custom_coords=custom_coords, force_refresh=refresh)
@@ -457,6 +493,7 @@ async def api_get_alerts(
 
 @app.get("/api/v1/ai-bulletin")
 async def api_get_ai_bulletin(
+    request: Request,
     location: str | None = Query(default=None),
     district: str | None = Query(default="GE-CENTRO-PONENTE"),
     lat: float | None = Query(default=None),
@@ -465,12 +502,19 @@ async def api_get_ai_bulletin(
     refresh: bool = Query(default=False),
 ) -> dict[str, Any]:
     """Analisi sinottica pura generata da Google Gemini (o motore sinottico ligure deterministico)."""
+    client_ip = _client_ip(request)
+    _AI_RATE_LIMITER.check(client_ip)
+    if refresh:
+        _REFRESH_RATE_LIMITER.check(client_ip)
+
     settings = get_settings()
     cache = _get_cache()
     target = location or district
     d, loc_meta, custom_coords = _resolve_target(target, lat, lon)
     loc_key = loc_meta.id if loc_meta else d.id
-    b_key = f"ai:v2:{loc_key}:{mode}:{custom_coords[0] if custom_coords else d.lat:.2f}"
+    b_lat = custom_coords[0] if custom_coords else d.lat
+    b_lon = custom_coords[1] if custom_coords else d.lon
+    b_key = f"ai:v2:{loc_key}:{mode}:{b_lat:.2f}:{b_lon:.2f}"
     if not refresh:
         cached = cache.get(b_key, allow_stale=False)
         if cached:

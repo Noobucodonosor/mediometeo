@@ -105,3 +105,34 @@ def test_omirl_chart_validation_and_security_headers(monkeypatch: pytest.MonkeyP
     # 4. SRI sui tag CDN di index.html
     index_html = (Path(__file__).resolve().parent.parent / "frontend" / "index.html").read_text(encoding="utf-8")
     assert index_html.count('integrity="sha384-') == 3
+
+
+def test_rate_limiter_and_circuit_breaker() -> None:
+    """Verifica SlidingWindowRateLimiter (429) e CircuitBreaker (apertura dopo 3 errori) (TASK-SEC-04 / #28)."""
+    from fastapi import HTTPException
+    from backend.security import CircuitBreaker, SlidingWindowRateLimiter
+
+    limiter = SlidingWindowRateLimiter(max_requests=2, window_seconds=60.0)
+    limiter.check("1.2.3.4")
+    limiter.check("1.2.3.4")
+    with pytest.raises(HTTPException) as exc_info:
+        limiter.check("1.2.3.4")
+    assert exc_info.value.status_code == 429
+
+    cb = CircuitBreaker(failure_threshold=3, cooldown_seconds=300.0)
+    assert cb.is_open("omirl") is False
+    cb.record_failure("omirl")
+    cb.record_failure("omirl")
+    assert cb.is_open("omirl") is False
+    cb.record_failure("omirl")
+    assert cb.is_open("omirl") is True
+    cb.record_success("omirl")
+    assert cb.is_open("omirl") is False
+
+
+def test_ai_bulletin_cache_key_includes_lon() -> None:
+    """Verifica che la cache key di /api/v1/ai-bulletin includa sia lat che lon (TASK-SEC-04 / #28)."""
+    from pathlib import Path
+
+    main_src = (Path(__file__).resolve().parent.parent / "backend" / "main.py").read_text(encoding="utf-8")
+    assert 'b_key = f"ai:v2:{loc_key}:{mode}:{b_lat:.2f}:{b_lon:.2f}"' in main_src

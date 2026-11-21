@@ -21,6 +21,25 @@ from backend.engine.omirl_arpal import (
     fetch_metno_compact,
     fetch_omirl_live_observations,
 )
+from backend.security import CircuitBreaker
+
+_CIRCUIT_BREAKER = CircuitBreaker(failure_threshold=3, cooldown_seconds=300.0)
+
+
+async def _guarded_fetch(source_name: str, coro_factory):
+    """Esegue un fetch protetto dal Circuit Breaker (ADR-0002)."""
+    if _CIRCUIT_BREAKER.is_open(source_name):
+        return RuntimeError(f"Circuit breaker open for {source_name}")
+    try:
+        res = await coro_factory()
+    except Exception as exc:
+        _CIRCUIT_BREAKER.record_failure(source_name)
+        return exc
+    if not res:
+        _CIRCUIT_BREAKER.record_failure(source_name)
+    else:
+        _CIRCUIT_BREAKER.record_success(source_name)
+    return res
 
 
 OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
@@ -198,13 +217,13 @@ async def fetch_all_raw_sources(
 
     async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as client:
         results = await asyncio.gather(
-            fetch_open_meteo_multimodel(client, lat, lon),
-            fetch_open_meteo_marine(client, sea_lat, sea_lon),
-            fetch_rainviewer_radar(client),
+            _guarded_fetch("open_meteo_multimodel", lambda: fetch_open_meteo_multimodel(client, lat, lon)),
+            _guarded_fetch("open_meteo_marine", lambda: fetch_open_meteo_marine(client, sea_lat, sea_lon)),
+            _guarded_fetch("rainviewer_radar", lambda: fetch_rainviewer_radar(client)),
             fetch_optional_commercial_sources(client, lat, lon, sea_lat, sea_lon),
-            fetch_metno_compact(client, lat, lon),
-            fetch_arpal_official_bulletins(client),
-            fetch_omirl_live_observations(client, lat, lon),
+            _guarded_fetch("met_norway", lambda: fetch_metno_compact(client, lat, lon)),
+            _guarded_fetch("arpal_liguria_bulletins", lambda: fetch_arpal_official_bulletins(client)),
+            _guarded_fetch("omirl_stations_webcams", lambda: fetch_omirl_live_observations(client, lat, lon)),
             return_exceptions=True,
         )
 
