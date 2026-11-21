@@ -1252,7 +1252,13 @@ function renderDashboard() {
   // Refresh selected option state in unified picker
   populateLocationSelect();
 
-  // Popolamento dei 5 Numeri Chiave dell'HUD
+  // Popolamento HUD adattiva 4-metriche Terra / Mare
+  const isSeaMode = state.mode === "sea";
+  const cellTemp = document.getElementById("hud-cell-temp");
+  const cellWave = document.getElementById("hud-cell-wave");
+  if (cellTemp) cellTemp.hidden = isSeaMode;
+  if (cellWave) cellWave.hidden = !isSeaMode;
+
   const hudTemp = document.getElementById("hud-val-temp");
   const hudSubTemp = document.getElementById("hud-sub-temp");
   if (hudTemp) {
@@ -1263,10 +1269,9 @@ function renderDashboard() {
   const hudWind = document.getElementById("hud-val-wind");
   const hudSubWind = document.getElementById("hud-sub-wind");
   if (hudWind) {
-    hudWind.textContent =
-      state.mode === "sea"
-        ? `${wind.speed_knots} kt (raff. ${wind.gust_knots} kt)`
-        : `${cur.wind_kmh} km/h (${wind.speed_knots} kt)`;
+    hudWind.textContent = isSeaMode
+      ? `${wind.speed_knots} kt (raff. ${wind.gust_knots} kt)`
+      : `${cur.wind_kmh} km/h (${wind.speed_knots} kt)`;
     hudSubWind.textContent = `${wind.ligurian_name} (${wind.cardinal} ${wind.direction_deg}°) • F${wind.beaufort.force} Bft`;
   }
 
@@ -1277,11 +1282,20 @@ function renderDashboard() {
     hudSubWave.textContent = `Tp ${waves.peak_period_s}s da ${waves.direction_cardinal} • ${waves.douglas.label}`;
   }
 
+  const hudLblRain = document.getElementById("hud-lbl-rain");
   const hudRain = document.getElementById("hud-val-rain");
   const hudSubRain = document.getElementById("hud-sub-rain");
   if (hudRain) {
-    hudRain.textContent = `${landRisk.hydrogeological.precip_1h_mm} mm/h`;
-    hudSubRain.textContent = `Risacca riva: ${coastal.bay_surge.shore_breaker_height_m}m • Marea ${coastal.tides.current_height_cm}cm`;
+    if (isSeaMode) {
+      if (hudLblRain) hudLblRain.textContent = "Risacca e marea";
+      hudRain.textContent = `Risacca ${coastal.bay_surge.shore_breaker_height_m}m`;
+      const tideTag = coastal.tides?.is_synthetic ? "Marea stimata" : "Marea";
+      hudSubRain.textContent = `${tideTag} ${coastal.tides.current_height_cm}cm (${coastal.tides.current_phase})`;
+    } else {
+      if (hudLblRain) hudLblRain.textContent = "Pioggia 1h";
+      hudRain.textContent = `${landRisk.hydrogeological.precip_1h_mm} mm/h`;
+      hudSubRain.textContent = `${landRisk.hydrogeological.label}`;
+    }
   }
 
   const hudPress = document.getElementById("hud-val-press");
@@ -1315,22 +1329,13 @@ function renderDashboard() {
     { hour: "2-digit", minute: "2-digit" }
   );
 
-  // 2. Tab 1: Riepilogo + Quadrante SVG + Stazioni OMIRL + Idrometri + Webcam
-  document.getElementById("main-weather-desc").textContent = cur.weather_description;
-  document.getElementById("main-temp").textContent = `${cur.temp_c.toFixed(1)}°C`;
-
-  if (state.mode === "sea") {
-    document.getElementById(
-      "main-wind-summary"
-    ).textContent = `${wind.ligurian_name} (${wind.cardinal} ${wind.direction_deg}°) ${wind.speed_knots} kt (${wind.speed_ms} m/s) • Raffica ${wind.gust_knots} kt (F${wind.beaufort.force} Beaufort)`;
-  } else {
-    document.getElementById(
-      "main-wind-summary"
-    ).textContent = `${cur.wind_ligurian_name} (${cur.wind_cardinal} ${cur.wind_dir_deg}°) ${cur.wind_kmh} km/h (${wind.speed_knots} kt) • Raffica ${cur.gust_kmh} km/h`;
+  // 2. Tab 1: Diagnostica compatta + Quadrante SVG + Stazioni OMIRL + Idrometri + Webcam
+  const descEl = document.getElementById("main-weather-desc");
+  if (descEl) {
+    descEl.textContent = `${cur.weather_description} • ${cur.wind_ligurian_name} ${state.mode === "sea" ? wind.speed_knots + " kt" : cur.wind_kmh + " km/h"}`;
   }
-
-  document.getElementById("pressure-value").textContent = `${cur.pressure_hpa} hPa`;
-  document.getElementById("pressure-trend").textContent = cur.pressure_trend_label;
+  const trendEl = document.getElementById("pressure-trend");
+  if (trendEl) trendEl.textContent = `${cur.pressure_hpa} hPa • ${cur.pressure_trend_label}`;
   document.getElementById(
     "wind-local-note"
   ).innerHTML = `<span><strong>Rosa dei venti ligure (${escapeHtml(wind.ligurian_name)} — ${escapeHtml(wind.cardinal)}):</strong> ${escapeHtml(wind.local_note)}</span>`;

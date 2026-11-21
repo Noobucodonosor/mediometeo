@@ -105,27 +105,27 @@
     </div>
 
     <div class="hud-metrics-strip">
-      <div class="hud-metric">
+      <div class="hud-metric" id="hud-cell-temp">
         <span class="hud-m-label">Temperatura</span>
         <strong id="hud-val-temp" class="hud-m-val">--°C</strong>
         <span id="hud-sub-temp" class="hud-m-sub">--</span>
       </div>
-      <div class="hud-metric">
+      <div class="hud-metric" id="hud-cell-wind">
         <span class="hud-m-label">Vento</span>
         <strong id="hud-val-wind" class="hud-m-val">-- kt</strong>
         <span id="hud-sub-wind" class="hud-m-sub">--</span>
       </div>
-      <div class="hud-metric">
+      <div class="hud-metric" id="hud-cell-wave" hidden>
         <span class="hud-m-label">Moto ondoso</span>
         <strong id="hud-val-wave" class="hud-m-val">-- m</strong>
         <span id="hud-sub-wave" class="hud-m-sub">--</span>
       </div>
-      <div class="hud-metric">
-        <span class="hud-m-label">Pioggia e risacca</span>
+      <div class="hud-metric" id="hud-cell-rain">
+        <span class="hud-m-label" id="hud-lbl-rain">Pioggia 1h</span>
         <strong id="hud-val-rain" class="hud-m-val">-- mm/h</strong>
         <span id="hud-sub-rain" class="hud-m-sub">--</span>
       </div>
-      <div class="hud-metric">
+      <div class="hud-metric" id="hud-cell-press">
         <span class="hud-m-label">Pressione</span>
         <strong id="hud-val-press" class="hud-m-val">---- hPa</strong>
         <div class="hud-metric-badges">
@@ -169,24 +169,14 @@
       <div class="hero-adesso-grid">
         <article class="card">
           <div class="card-header">
-            <h2 class="card-title" id="hero-kpi-title">Riepilogo locale</h2>
+            <div>
+              <h2 class="card-title" id="hero-kpi-title">Diagnostica locale</h2>
+              <div id="main-weather-desc" class="card-subtitle">--</div>
+              <div id="pressure-trend" class="hero-pressure-trend">Tendenza barica 3h: --</div>
+            </div>
             <button type="button" id="btn-adesso-to-map" class="btn-action">
               Torna alla mappa
             </button>
-          </div>
-
-          <div class="hero-summary-row">
-            <div>
-              <div id="main-weather-desc" class="hero-weather-desc">--</div>
-              <div class="hero-temp-line">
-                <span id="main-temp" class="hero-temp-num">--°C</span>
-                <span id="main-wind-summary" class="hero-wind-summary">Vento: --</span>
-              </div>
-            </div>
-            <div class="hero-pressure-col">
-              <div id="pressure-value" class="hero-pressure-num">---- hPa</div>
-              <div id="pressure-trend" class="hero-pressure-trend">Tendenza barica 3h: --</div>
-            </div>
           </div>
 
           <div id="kpi-dynamic-grid" class="kpi-grid"></div>

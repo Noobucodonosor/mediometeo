@@ -524,7 +524,7 @@ select:focus-visible {
 
 .hud-metrics-strip {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   background-color: var(--p-hairline);
   border: 1px solid var(--p-hairline);
   border-radius: var(--r-md);
@@ -536,17 +536,10 @@ select:focus-visible {
   .hud-metrics-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .hud-metric:last-child {
-    grid-column: 1 / -1;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem 0.85rem;
-  }
-  .hud-metric:last-child .hud-metric-badges {
-    margin-top: 0;
-  }
+}
+
+.hud-metric[hidden] {
+  display: none;
 }
 
 .hud-metric {
