@@ -399,6 +399,25 @@ function bindUIEvents() {
 
   // Route Calculator
   document.getElementById("btn-calc-route").addEventListener("click", calculateCoastalRoute);
+
+  // Modelli Focused View Switcher (Meteogrammi | Confronto 5 modelli | 7 giorni)
+  document.querySelectorAll(".modelli-subtab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const targetId = btn.getAttribute("data-modelli-pane");
+      document.querySelectorAll(".modelli-subtab-btn").forEach((b) => {
+        const active = b === btn;
+        b.classList.toggle("active", active);
+        b.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+      ["modelli-pane-charts", "modelli-pane-table", "modelli-pane-7d"].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.hidden = id !== targetId;
+      });
+      if (targetId === "modelli-pane-charts" && state.weatherPkg) {
+        setTimeout(() => renderCharts(state.weatherPkg.forecast.hourly_48h), 40);
+      }
+    });
+  });
 }
 
 async function selectLocationById(locId, autoSwitchToAdesso = false) {

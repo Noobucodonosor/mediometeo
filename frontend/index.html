@@ -308,7 +308,15 @@
          SCHEDA: Modelli
          ====================================================================== -->
     <section id="tab-modelli" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-modelli" hidden>
-      <div class="charts-grid">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:0.85rem;">
+        <div class="mode-switch" role="group" aria-label="Vista modelli">
+          <button type="button" class="mode-btn modelli-subtab-btn active" data-modelli-pane="modelli-pane-charts" aria-pressed="true">Meteogrammi</button>
+          <button type="button" class="mode-btn modelli-subtab-btn" data-modelli-pane="modelli-pane-table" aria-pressed="false">Confronto 5 modelli</button>
+          <button type="button" class="mode-btn modelli-subtab-btn" data-modelli-pane="modelli-pane-7d" aria-pressed="false">7 giorni</button>
+        </div>
+      </div>
+
+      <div id="modelli-pane-charts" class="charts-grid">
         <article class="card">
           <div class="card-header">
             <h2 class="card-title">Meteogramma pioggia e temperatura</h2>
@@ -330,7 +338,7 @@
         </article>
       </div>
 
-      <article class="card">
+      <article id="modelli-pane-table" class="card" hidden>
         <div class="card-header">
           <h2 class="card-title">Confronto orario 5 modelli (24h)</h2>
           <span class="card-meta-note">AROME 1.3km • ICON-D2 2km • ECMWF 9km • GFS • MET.no</span>
@@ -357,7 +365,7 @@
         </div>
       </article>
 
-      <article class="card">
+      <article id="modelli-pane-7d" class="card" hidden>
         <div class="card-header">
           <h2 class="card-title">Previsione a 7 giorni</h2>
           <span class="card-meta-note">Ensemble 5 modelli + Open-Meteo Marine</span>
