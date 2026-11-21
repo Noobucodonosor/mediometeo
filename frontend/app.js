@@ -163,9 +163,42 @@ function placeCustomPin(lat, lon) {
   }).addTo(state.map);
 }
 
+function shortRadaName(rawName) {
+  let s = String(rawName || "").split("(")[0].trim();
+  const prefixes = [
+    "Baia e Porto di ",
+    "Porto e Rada di ",
+    "Rada e Porto ",
+    "Punta del Capo / ",
+    "Scogliera di ",
+    "Baia di ",
+    "Porto di ",
+    "Rada di ",
+    "Marina di ",
+    "Cala di ",
+  ];
+  for (const p of prefixes) {
+    if (s.startsWith(p)) {
+      s = s.slice(p.length);
+      break;
+    }
+  }
+  return s.length > 16 ? s.slice(0, 15) + "…" : s;
+}
+
 function renderActiveMapLayer() {
   if (!state.map || !state.overlayGroup) return;
   state.overlayGroup.clearLayers();
+  const placedPts = [];
+
+  const canPlace = (lat, lon, minDx = 68, minDy = 28) => {
+    const pt = state.map.latLngToContainerPoint([lat, lon]);
+    for (const p of placedPts) {
+      if (Math.abs(pt.x - p.x) < minDx && Math.abs(pt.y - p.y) < minDy) return false;
+    }
+    placedPts.push(pt);
+    return true;
+  };
 
   const radarBar = document.getElementById("radar-bar");
   if (radarBar) radarBar.hidden = state.activeLayer !== "radar";
@@ -182,11 +215,12 @@ function renderActiveMapLayer() {
   const zoom = state.map.getZoom() || 10;
 
   if (state.activeLayer === "wind") {
-    const stations = (obs.all_weather_stations || obs.nearest_weather_stations || []).filter(
-      (s) => s.has_live_wind !== false && s.sensor !== "Termo/Pluvio"
-    );
-    stations.forEach((st, idx) => {
-      if (zoom < 12 && st.display_tier > 1 && st.severity === "normal" && idx >= 10) return;
+    const stations = (obs.all_weather_stations || obs.nearest_weather_stations || [])
+      .filter((s) => s.has_live_wind !== false && s.sensor !== "Termo/Pluvio")
+      .sort((a, b) => (a.display_tier ?? 3) - (b.display_tier ?? 3));
+    stations.forEach((st) => {
+      if (zoom < 12 && st.display_tier > 1 && st.severity === "normal") return;
+      if (st.severity === "normal" && !canPlace(st.lat, st.lon)) return;
       const rot = ((st.wind_dir_deg ?? 0) + 90) % 360;
       const cls = st.severity === "alert" ? "is-alert" : st.severity === "watch" ? "is-watch" : "";
       const arrow = `<svg width="11" height="11" viewBox="0 0 12 12" style="transform:rotate(${rot}deg)" aria-hidden="true"><path d="M1.5 6h8M6.5 2.5L10.5 6l-4 3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -194,7 +228,7 @@ function renderActiveMapLayer() {
     });
   } else if (state.activeLayer === "waves") {
     const buoy = obs.marine_wave_buoy || obs.buoys_live?.[0];
-    if (buoy) {
+    if (buoy && canPlace(buoy.lat ?? 43.918, buoy.lon ?? 8.185)) {
       addPointMarker(
         buoy.lat ?? 43.918,
         buoy.lon ?? 8.185,
@@ -218,20 +252,24 @@ function renderActiveMapLayer() {
     }
     state.locations
       .filter((l) => l.loc_type === "rada_porto")
-      .slice(0, zoom < 11 ? 8 : 20)
       .forEach((rada) => {
-        addPointMarker(rada.lat, rada.lon, escapeHtml(rada.name.split("(")[0].trim().slice(0, 14)), "", `${rada.name}`, () => selectLocationById(rada.id));
+        if (!canPlace(rada.lat, rada.lon, 84, 26)) return;
+        addPointMarker(rada.lat, rada.lon, escapeHtml(shortRadaName(rada.name)), "", `${rada.name}`, () => selectLocationById(rada.id));
       });
   } else if (state.activeLayer === "stations") {
-    const allSt = obs.all_weather_stations || obs.nearest_weather_stations || [];
+    const allSt = [...(obs.all_weather_stations || obs.nearest_weather_stations || [])].sort(
+      (a, b) => (a.display_tier ?? 3) - (b.display_tier ?? 3)
+    );
     allSt.forEach((st) => {
       if (zoom < 11 && st.display_tier > 1 && st.severity === "normal") return;
+      if (st.severity === "normal" && !canPlace(st.lat, st.lon, 74, 26)) return;
       const cls = st.severity === "alert" ? "is-alert" : st.severity === "watch" ? "is-watch" : "";
       addPointMarker(st.lat, st.lon, `${escapeHtml(st.temp_c)}° · ${escapeHtml(st.precip_1h_mm)}mm`, cls, `${st.name} (${st.code})`, () => selectCoordsOnMap(st.lat, st.lon, "land"));
     });
     const hydros = obs.all_river_hydrometers || obs.nearest_river_hydrometers || [];
     hydros.forEach((hy) => {
       if (zoom < 11 && hy.display_tier > 1 && hy.status_level === "green") return;
+      if (hy.status_level === "green" && !canPlace(hy.lat, hy.lon, 74, 26)) return;
       const cls = hy.status_level === "red" ? "is-alert" : hy.status_level === "orange" ? "is-watch" : "";
       addPointMarker(hy.lat, hy.lon, `IDRO ${escapeHtml(hy.level_m)}m`, cls, `${hy.name} (${hy.river})`, () => selectCoordsOnMap(hy.lat, hy.lon, "land"));
     });
@@ -314,6 +352,8 @@ function setSheetState(nextState) {
   state.sheetState = nextState;
   const sheet = document.getElementById("bottom-sheet");
   const btn = document.getElementById("btn-sheet-expand");
+  const scroller = document.querySelector(".sheet-scroll");
+  if (scroller) scroller.scrollTop = 0;
   if (sheet) sheet.setAttribute("data-state", nextState);
   if (btn) {
     btn.textContent =
@@ -472,10 +512,22 @@ function renderSheet() {
   }
 
   const shortEl = document.getElementById("ai-short-summary");
+  const fullEl = document.getElementById("ai-full-analysis");
   if (shortEl) {
-    const headline = state.aiBulletin?.headline || `${cur.weather_description} a ${loc.name}.`;
-    const body = (state.aiBulletin?.synoptic_nowcast_analysis || "").split("\n")[0] || "";
-    shortEl.textContent = `${headline} ${body}`.trim();
+    const convScore = pkg.nowcast?.ligurian_convergence?.convergence_score ?? 0;
+    const rainPeak = Math.max(
+      ...(pkg.forecast?.hourly_48h || []).slice(0, 6).map((h) => h.precip_max_lam_mm ?? h.precip_mm ?? 0),
+      0
+    );
+    if (isSea) {
+      shortEl.textContent = `${waves.douglas.label} a ${loc.name} (Hs ${waves.significant_height_m}m, Tp ${waves.peak_period_s}s) con ${wind.ligurian_name} a ${wind.speed_knots} kt. Risacca a riva intorno a ${cp.bay_surge.shore_breaker_height_m}m.`;
+    } else {
+      const rainHint = rainPeak >= 1.0 ? `Rovesci fino a ${rainPeak.toFixed(1)} mm/h nelle prossime 6h.` : convScore >= 50 ? `Convergenza attiva (${convScore}/100) con cielo coperto.` : "Situazione stabile senza precipitazioni di rilievo.";
+      shortEl.textContent = `${cur.weather_description} a ${loc.name} (${cur.temp_c.toFixed(1)}°C), ${wind.ligurian_name} ${wind.speed_knots} kt (raff. ${wind.gust_knots} kt). ${rainHint}`;
+    }
+  }
+  if (fullEl) {
+    fullEl.textContent = state.aiBulletin?.synoptic_nowcast_analysis || "";
   }
 
   const metricsEl = document.getElementById("sheet-metrics-grid");
@@ -533,11 +585,14 @@ function renderExpandedDetails(pkg) {
   if (tbody && hourly.length) {
     const fmt = (m, k) => (m[k]?.wind_knots !== null && m[k]?.wind_knots !== undefined ? `${m[k].wind_knots}kt` : "--");
     tbody.innerHTML = hourly
-      .slice(0, 12)
+      .slice(0, 24)
       .map((h) => {
         const hh = (h.time.split("T")[1] || h.time).slice(0, 5);
         const m = h.models || {};
-        return `<tr><td>${escapeHtml(hh)}</td><td>${escapeHtml(h.wind_knots)}kt</td><td>${escapeHtml(fmt(m, "meteofrance_arome_france_hd"))}</td><td>${escapeHtml(fmt(m, "icon_d2"))}</td><td>${escapeHtml(fmt(m, "ecmwf_ifs025"))}</td><td>${escapeHtml(fmt(m, "gfs_seamless"))}</td><td>${escapeHtml(fmt(m, "met_norway"))}</td><td>${escapeHtml(h.model_spread?.wind_spread_knots ?? 0)}kt</td><td>${escapeHtml(h.precip_mm)}mm</td><td>${escapeHtml(h.wave_hs_m)}m</td></tr>`;
+        const sp = h.model_spread?.wind_spread_knots ?? 0;
+        const spCls = sp >= 8 ? "spread-hi" : sp >= 5 ? "spread-mid" : "";
+        const rnCls = (h.precip_mm ?? 0) >= 1 ? "rain-hi" : "";
+        return `<tr><td>${escapeHtml(hh)}</td><td>${escapeHtml(h.wind_knots)}kt</td><td>${escapeHtml(fmt(m, "meteofrance_arome_france_hd"))}</td><td>${escapeHtml(fmt(m, "icon_d2"))}</td><td>${escapeHtml(fmt(m, "ecmwf_ifs025"))}</td><td>${escapeHtml(fmt(m, "gfs_seamless"))}</td><td>${escapeHtml(fmt(m, "met_norway"))}</td><td class="${spCls}">${escapeHtml(sp)}kt</td><td class="${rnCls}">${escapeHtml(h.precip_mm)}mm</td><td>${escapeHtml(h.wave_hs_m)}m</td></tr>`;
       })
       .join("");
   }
@@ -561,17 +616,26 @@ function renderExpandedDetails(pkg) {
   if (hyGrid) {
     hyGrid.innerHTML = hydros
       .slice(0, 6)
-      .map((hy) => `<div class="obs-row"><div class="obs-row-top"><span>${escapeHtml(hy.name)} (${escapeHtml(hy.river)})</span><span>${escapeHtml(hy.level_m)} m</span></div><div class="obs-row-sub">Gialla ${escapeHtml(hy.warn_threshold_m)}m · Rossa ${escapeHtml(hy.alarm_threshold_m)}m · Ore ${escapeHtml(hy.observed_at)}</div></div>`)
+      .map((hy) => `<div class="obs-row"><div class="obs-row-top"><span><span class="hydro-dot ${escapeHtml(hy.status_level || "green")}"></span>${escapeHtml(hy.name)} (${escapeHtml(hy.river)})</span><span>${escapeHtml(hy.level_m)} m</span></div><div class="obs-row-sub">Gialla ${escapeHtml(hy.warn_threshold_m)}m · Rossa ${escapeHtml(hy.alarm_threshold_m)}m · Ore ${escapeHtml(hy.observed_at)}</div></div>`)
       .join("");
   }
 
   const arpalBox = document.getElementById("arpal-bulletin-box");
   const arpal = pkg.official_bulletins?.arpal;
   if (arpalBox && arpal) {
+    let issuedStr = arpal.issued_at || "";
+    try {
+      if (issuedStr) {
+        const d = new Date(issuedStr);
+        if (!Number.isNaN(d.getTime())) {
+          issuedStr = d.toLocaleString("it-IT", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+        }
+      }
+    } catch (_) {}
     const days = (arpal.days || [])
       .map((d) => `<div class="obs-row"><div class="obs-row-top"><span>${escapeHtml(d.label)}</span></div><div class="obs-row-sub">${escapeHtml(d.forecast_text)} — Venti: ${escapeHtml(d.winds)} — Mare: ${escapeHtml(d.sea)}</div></div>`)
       .join("");
-    arpalBox.innerHTML = `<div class="obs-row"><div class="obs-row-top"><span>${escapeHtml(arpal.source || "ARPAL")}</span><span>${escapeHtml(arpal.issued_at || "")}</span></div><div class="obs-row-sub">${escapeHtml(arpal.synoptic_situation || "")}</div></div>${days}`;
+    arpalBox.innerHTML = `<div class="obs-row"><div class="obs-row-top"><span>${escapeHtml(arpal.source || "ARPAL")}</span><span>${escapeHtml(issuedStr)}</span></div><div class="obs-row-sub">${escapeHtml(arpal.synoptic_situation || "")}</div></div>${days}`;
   }
 
   const dl = document.getElementById("disclaimer-land-text");
@@ -664,7 +728,11 @@ async function calculateAndDrawRoute() {
         .bindTooltip(`${idx + 1}. ${escapeHtml(w.name)}`)
         .addTo(state.routeGroup);
     });
-    state.map.fitBounds(poly.getBounds().pad(0.35));
+    const isWide = window.innerWidth >= 960;
+    state.map.fitBounds(poly.getBounds(), {
+      paddingTopLeft: [30, 80],
+      paddingBottomRight: isWide ? [390, 90] : [90, 360],
+    });
   }
 }
 
@@ -744,7 +812,10 @@ function bindEvents() {
     if (!routePanel) return;
     routePanel.hidden = !routePanel.hidden;
     e.currentTarget.setAttribute("aria-expanded", routePanel.hidden ? "false" : "true");
-    if (!routePanel.hidden) calculateAndDrawRoute();
+    if (!routePanel.hidden) {
+      setSheetState("peek");
+      calculateAndDrawRoute();
+    }
   });
   document.getElementById("btn-close-route")?.addEventListener("click", () => {
     if (routePanel) routePanel.hidden = true;
