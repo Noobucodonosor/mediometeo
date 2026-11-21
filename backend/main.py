@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+from collections import OrderedDict
 from contextlib import asynccontextmanager
+import inspect
 import logging
 from pathlib import Path
 from typing import Any
@@ -89,7 +91,7 @@ async def add_security_headers(request, call_next):
     response.headers.setdefault(
         "Content-Security-Policy",
         "default-src 'self'; "
-        "script-src 'self' https://unpkg.com https://cdn.jsdelivr.net; "
+        "script-src 'self'; "
         "style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' data: https://tile.openstreetmap.org https://*.tile.openstreetmap.org "
@@ -101,15 +103,35 @@ async def add_security_headers(request, call_next):
     return response
 
 
-_PKG_LOCKS: dict[str, asyncio.Lock] = {}
+_MAX_PKG_LOCKS = 256
+_PKG_LOCKS: OrderedDict[str, asyncio.Lock] = OrderedDict()
 _AI_RATE_LIMITER = SlidingWindowRateLimiter(max_requests=15, window_seconds=60.0)
 _REFRESH_RATE_LIMITER = SlidingWindowRateLimiter(max_requests=10, window_seconds=60.0)
 
 
+def _get_pkg_lock(cache_key: str) -> asyncio.Lock:
+    """Restituisce un lock single-flight con eviction LRU limitata a _MAX_PKG_LOCKS."""
+    lock = _PKG_LOCKS.get(cache_key)
+    if lock is not None:
+        _PKG_LOCKS.move_to_end(cache_key)
+        return lock
+    lock = asyncio.Lock()
+    _PKG_LOCKS[cache_key] = lock
+    if len(_PKG_LOCKS) > _MAX_PKG_LOCKS:
+        for key in list(_PKG_LOCKS.keys()):
+            if key != cache_key and not _PKG_LOCKS[key].locked():
+                _PKG_LOCKS.pop(key, None)
+                if len(_PKG_LOCKS) <= _MAX_PKG_LOCKS:
+                    break
+    return lock
+
+
 def _client_ip(request: Request) -> str:
-    fwd = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-    if fwd:
-        return fwd
+    """Risolve l'IP client evitando spoofing di X-Forwarded-For fuori da proxy fidati."""
+    if get_settings().trust_proxy_headers:
+        fwd_parts = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()]
+        if fwd_parts:
+            return fwd_parts[-1]
     return request.client.host if request.client else "unknown"
 
 
@@ -209,7 +231,7 @@ async def _load_or_compute_weather_package(
             payload["from_cache"] = True
             return payload
 
-    lock = _PKG_LOCKS.setdefault(cache_key, asyncio.Lock())
+    lock = _get_pkg_lock(cache_key)
     async with lock:
         if not force_refresh:
             cached = cache.get(cache_key, allow_stale=False)
@@ -219,7 +241,11 @@ async def _load_or_compute_weather_package(
                 payload["from_cache"] = True
                 return payload
 
-        raw = await fetch_all_raw_sources(lat, lon, sea_lat, sea_lon)
+        http_client = getattr(app.state, "http_client", None)
+        if "client" in inspect.signature(fetch_all_raw_sources).parameters:
+            raw = await fetch_all_raw_sources(lat, lon, sea_lat, sea_lon, client=http_client)
+        else:
+            raw = await fetch_all_raw_sources(lat, lon, sea_lat, sea_lon)
 
         if not raw.get("multimodel"):
             stale = cache.get(cache_key, allow_stale=True)
@@ -264,7 +290,7 @@ async def health_check() -> dict[str, Any]:
         {
             "status": "ok",
             "app_name": settings.app_name,
-            "version": "2.0.0",
+            "version": settings.version,
             "domain": "Provincia di Genova (67 Comuni + 25 Quartieri + 20 Rade/Porti + 6 Valichi)",
             "locations_catalog_count": len(all_locs),
             "geofence_bbox": {

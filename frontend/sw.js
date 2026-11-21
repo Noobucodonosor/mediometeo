@@ -1,8 +1,10 @@
-const CACHE_NAME = "mediometeo-genova-v4.0";
+const CACHE_NAME = "mediometeo-genova-v4.1";
 const STATIC_ASSETS = [
   "/",
+  "/orologio",
   "/static/styles.css?v=4.0",
   "/static/app.js?v=4.0",
+  "/static/orologio.js",
   "/static/js/state.js?v=4.0",
   "/static/js/api.js?v=4.0",
   "/static/js/charts.js?v=4.0",
@@ -33,6 +35,8 @@ self.addEventListener("activate", (event) => {
 // Network-first strategy so live code updates are always served immediately (never caches 5xx/errors)
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+  const reqUrl = new URL(event.request.url);
+  if (reqUrl.origin !== self.location.origin) return;
   event.respondWith(
     fetch(event.request)
       .then((res) => {

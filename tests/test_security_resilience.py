@@ -125,7 +125,10 @@ def test_omirl_chart_validation_and_security_headers(monkeypatch: pytest.MonkeyP
     health = client.get("/api/v1/health")
     assert health.headers.get("x-content-type-options") == "nosniff"
     assert health.headers.get("x-frame-options") == "DENY"
-    assert "script-src 'self'" in (health.headers.get("content-security-policy") or "")
+    csp = health.headers.get("content-security-policy") or ""
+    assert "script-src 'self';" in csp
+    assert "unpkg.com" not in csp.split("style-src")[0]
+    assert health.json()["version"] == "4.0.0"
 
     # 4. Vendor locali self-hosted in index.html (zero dipendenza da CDN esterni per JS/CSS critici)
     index_html = (Path(__file__).resolve().parent.parent / "frontend" / "index.html").read_text(encoding="utf-8")
@@ -163,3 +166,63 @@ def test_ai_bulletin_cache_key_includes_lon() -> None:
 
     main_src = (Path(__file__).resolve().parent.parent / "backend" / "main.py").read_text(encoding="utf-8")
     assert 'b_key = f"ai:v2:{loc_key}:{mode}:{b_lat:.2f}:{b_lon:.2f}"' in main_src
+
+
+def test_client_ip_prevents_xff_spoofing_and_pkg_locks_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verifica protezione anti-spoofing X-Forwarded-For e bound LRU di _PKG_LOCKS."""
+    from types import SimpleNamespace
+    from backend import main as main_mod
+    from backend.config import Settings
+
+    fake_req = SimpleNamespace(
+        headers={"x-forwarded-for": "9.9.9.9, 198.51.100.42"},
+        client=SimpleNamespace(host="127.0.0.1"),
+    )
+
+    monkeypatch.setattr(main_mod, "get_settings", lambda: Settings(trust_proxy_headers=False))
+    assert main_mod._client_ip(fake_req) == "127.0.0.1"
+
+    monkeypatch.setattr(main_mod, "get_settings", lambda: Settings(trust_proxy_headers=True))
+    assert main_mod._client_ip(fake_req) == "198.51.100.42"
+
+    main_mod._PKG_LOCKS.clear()
+    for i in range(main_mod._MAX_PKG_LOCKS + 30):
+        main_mod._get_pkg_lock(f"test:key:{i}")
+    assert len(main_mod._PKG_LOCKS) <= main_mod._MAX_PKG_LOCKS
+    main_mod._PKG_LOCKS.clear()
+
+
+@pytest.mark.asyncio
+async def test_ai_advisor_timeout_falls_back_deterministically(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verifica che un timeout di Gemini attivi il fallback deterministico senza bloccare la richiesta."""
+    import asyncio
+    from backend.config import Settings
+    from backend.districts import get_district
+    from backend.engine import ai_advisor
+    from backend.engine.ensemble import (
+        build_complete_weather_package,
+        build_synthetic_fallback_dataset,
+    )
+
+    monkeypatch.setattr(
+        ai_advisor,
+        "get_settings",
+        lambda: Settings(gemini_api_key="fake-key", http_timeout_seconds=0.05),
+    )
+
+    async def slow_to_thread(*args, **kwargs):
+        await asyncio.sleep(0.5)
+        return "too late"
+
+    monkeypatch.setattr(ai_advisor.asyncio, "to_thread", slow_to_thread)
+
+    district = get_district("GE-CENTRO-PONENTE")
+    assert district is not None
+    pkg = build_complete_weather_package(district, build_synthetic_fallback_dataset(district))
+
+    res_bulletin = await ai_advisor.generate_ai_bulletin(pkg, mode="both")
+    assert res_bulletin["ai_powered"] is False
+
+    res_ask = await ai_advisor.answer_point_question(pkg, "Che vento fa oggi?")
+    assert res_ask["ai_powered"] is False
+    assert district.name in res_ask["answer"]

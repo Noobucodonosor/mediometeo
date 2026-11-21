@@ -11,7 +11,7 @@
 - **Repository:** `Noobucodonosor/mediometeo`
 - **Descrizione Sintetica:** Piattaforma ad alta precisione di **Nowcasting (0-3h)** e **Forecasting (fino a 7 giorni)** per la **Provincia di Genova e il Golfo Ligure**, progettata con doppia modalità operativa **Terra** (allerte idrogeologiche, convergenza Tramontana Scura / Scirocco, microclimi vallate e costa) e **Mare** (moto ondoso, periodo d'onda, mareggiata, vento di burrasca, boe al largo e sottocosta).
 - **Stack Tecnologico:**
-  - **Backend:** Python 3.11+ con **FastAPI**, `httpx` (async), `pydantic`, `apscheduler` (polling asincrono fonti meteo).
+  - **Backend:** Python 3.11+ con **FastAPI**, `httpx` (async), `pydantic`, single-flight `asyncio.Lock` + cache TTL su SQLite.
   - **Frontend:** **Web App Responsive + PWA** (HTML5, CSS3 Moderno / Glassmorphism Dark UI, JavaScript ES6+, **Leaflet.js** per mappa interattiva radar/stazioni/vento/onde, **Chart.js** per meteogrammi multi-modello).
   - **Database & Cache:** **SQLite** (serie storiche osservazioni stazioni/boe, cache intelligente con TTL differenziato e storico bollettini AI).
   - **Fonti Dati Meteo & Marine:**

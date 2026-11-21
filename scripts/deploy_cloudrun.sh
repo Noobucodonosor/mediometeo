@@ -16,12 +16,17 @@ if [[ -z "$PROJECT_ID" ]]; then
 fi
 
 echo "1. Pre-release check sicurezza & ADR..."
-python3 ~/.gemini/config/skills/adr-github-methodology/scripts/pre_release_check.py
+PRE_RELEASE_SCRIPT="${HOME}/.gemini/config/skills/adr-github-methodology/scripts/pre_release_check.py"
+if [[ -f "${PRE_RELEASE_SCRIPT}" ]]; then
+  python3 "${PRE_RELEASE_SCRIPT}"
+else
+  echo "   [skip] pre_release_check.py non presente in questo ambiente."
+fi
 
 echo "2. Esecuzione suite offline deterministica..."
 .venv/bin/pytest -q -m "not live"
 
-ENV_VARS="MEDIOMETEO_DB_PATH=/tmp/mediometeo.sqlite"
+ENV_VARS="MEDIOMETEO_DB_PATH=/tmp/mediometeo.sqlite,TRUST_PROXY_HEADERS=true"
 if [[ -n "${GEMINI_API_KEY:-}" ]]; then
   ENV_VARS="${ENV_VARS},GEMINI_API_KEY=${GEMINI_API_KEY}"
 fi

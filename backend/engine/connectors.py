@@ -208,24 +208,34 @@ async def fetch_optional_commercial_sources(
 
 
 async def fetch_all_raw_sources(
-    lat: float, lon: float, sea_lat: float, sea_lon: float
+    lat: float,
+    lon: float,
+    sea_lat: float,
+    sea_lon: float,
+    client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
     """Esegue il fetch parallelo con isolamento dei guasti (ADR-0002 Circuit Breaker)."""
     settings = get_settings()
     sources_active: list[str] = []
     sources_degraded: list[str] = []
 
-    async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as client:
-        results = await asyncio.gather(
-            _guarded_fetch("open_meteo_multimodel", lambda: fetch_open_meteo_multimodel(client, lat, lon)),
-            _guarded_fetch("open_meteo_marine", lambda: fetch_open_meteo_marine(client, sea_lat, sea_lon)),
-            _guarded_fetch("rainviewer_radar", lambda: fetch_rainviewer_radar(client)),
-            fetch_optional_commercial_sources(client, lat, lon, sea_lat, sea_lon),
-            _guarded_fetch("met_norway", lambda: fetch_metno_compact(client, lat, lon)),
-            _guarded_fetch("arpal_liguria_bulletins", lambda: fetch_arpal_official_bulletins(client)),
-            _guarded_fetch("omirl_stations_webcams", lambda: fetch_omirl_live_observations(client, lat, lon)),
+    async def _run_with_client(active_client: httpx.AsyncClient) -> list[Any]:
+        return await asyncio.gather(
+            _guarded_fetch("open_meteo_multimodel", lambda: fetch_open_meteo_multimodel(active_client, lat, lon)),
+            _guarded_fetch("open_meteo_marine", lambda: fetch_open_meteo_marine(active_client, sea_lat, sea_lon)),
+            _guarded_fetch("rainviewer_radar", lambda: fetch_rainviewer_radar(active_client)),
+            fetch_optional_commercial_sources(active_client, lat, lon, sea_lat, sea_lon),
+            _guarded_fetch("met_norway", lambda: fetch_metno_compact(active_client, lat, lon)),
+            _guarded_fetch("arpal_liguria_bulletins", lambda: fetch_arpal_official_bulletins(active_client)),
+            _guarded_fetch("omirl_stations_webcams", lambda: fetch_omirl_live_observations(active_client, lat, lon)),
             return_exceptions=True,
         )
+
+    if client is not None:
+        results = await _run_with_client(client)
+    else:
+        async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as owned_client:
+            results = await _run_with_client(owned_client)
 
     (
         multimodel_raw,

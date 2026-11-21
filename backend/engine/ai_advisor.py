@@ -173,7 +173,10 @@ async def generate_ai_bulletin(
             )
             return resp.text or ""
 
-        ai_text = await asyncio.to_thread(_call_gemini)
+        ai_text = await asyncio.wait_for(
+            asyncio.to_thread(_call_gemini),
+            timeout=settings.http_timeout_seconds,
+        )
         if ai_text.strip():
             baseline["ai_powered"] = True
             baseline["engine"] = f"google_genai ({settings.gemini_model})"
@@ -291,7 +294,10 @@ async def answer_point_question(weather_pkg: dict[str, Any], question: str) -> d
             )
             return resp.text or ""
 
-        ai_text = await asyncio.to_thread(_call_gemini_qa)
+        ai_text = await asyncio.wait_for(
+            asyncio.to_thread(_call_gemini_qa),
+            timeout=settings.http_timeout_seconds,
+        )
         if ai_text.strip():
             return {
                 "location_name": loc["name"],

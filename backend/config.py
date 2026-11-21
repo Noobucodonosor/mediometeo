@@ -35,6 +35,9 @@ class Settings:
     cors_allow_origins: str = os.getenv(
         "CORS_ALLOW_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000"
     ).strip()
+    trust_proxy_headers: bool = (
+        os.getenv("TRUST_PROXY_HEADERS", "false").strip().lower() in {"1", "true", "yes"}
+    )
 
     def cors_origins_list(self) -> list[str]:
         """Restituisce la lista delle origini CORS consentite."""
