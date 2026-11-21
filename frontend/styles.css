@@ -77,13 +77,16 @@ html, body {
   color: var(--ink);
 }
 
-/* Top-Left Search Pill */
+/* Top-Left Search Pill & Stacked Operational Badges */
 .search-dock {
   position: absolute;
   top: 14px;
   left: 14px;
   z-index: 900;
   width: min(360px, calc(100vw - 92px));
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
 }
 
 .search-pill {
@@ -191,19 +194,14 @@ html, body {
 
 /* Conditional Watch Banner */
 .watch-banner {
-  position: absolute;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 880;
-  border-radius: 999px;
-  padding: 0.4rem 0.9rem;
-  font-size: 0.82rem;
+  border-radius: 12px;
+  padding: 0.38rem 0.75rem;
+  font-size: 0.8rem;
   font-weight: 600;
   border-color: rgba(217, 119, 6, 0.5);
   color: var(--amber);
   white-space: nowrap;
-  max-width: calc(100vw - 140px);
+  width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -263,16 +261,12 @@ html, body {
 
 /* Radar Scrubber */
 .radar-bar {
-  position: absolute;
-  top: 72px;
-  left: 14px;
-  z-index: 860;
   border-radius: 12px;
   padding: 0.35rem 0.65rem;
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  width: min(340px, calc(100vw - 92px));
+  width: 100%;
 }
 .radar-bar[hidden] { display: none; }
 .btn-mini {
@@ -371,7 +365,7 @@ html, body {
 .bottom-sheet {
   position: absolute;
   left: 14px;
-  right: 14px;
+  right: 84px;
   bottom: 12px;
   max-width: 1080px;
   margin: 0 auto;
@@ -384,7 +378,11 @@ html, body {
 }
 .bottom-sheet[data-state="peek"] { height: 64px; }
 .bottom-sheet[data-state="medium"] { height: min(370px, 46dvh); }
-.bottom-sheet[data-state="expanded"] { height: min(760px, 84dvh); }
+.bottom-sheet[data-state="expanded"] {
+  height: min(760px, 84dvh);
+  right: 14px;
+  z-index: 950;
+}
 
 .sheet-header {
   padding: 0.4rem 1rem 0.55rem;

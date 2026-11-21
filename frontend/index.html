@@ -55,10 +55,15 @@
         </div>
         <div id="loc-picker-list" class="loc-dropdown-list" role="listbox" aria-label="Elenco località"></div>
       </div>
-    </div>
 
-    <!-- 3. Top-Center: Watch Banner condizionale (visibile solo in allerta / convergenza alta) -->
-    <div id="liguria-watch-banner" class="watch-banner glass-panel" hidden role="status"></div>
+      <!-- 3. Watch Banner condizionale & Radar Scrubber impilati senza sovrapposizioni -->
+      <div id="liguria-watch-banner" class="watch-banner glass-panel" hidden role="status"></div>
+      <div id="radar-bar" class="radar-bar glass-panel" hidden>
+        <button id="btn-radar-play" type="button" class="btn-mini">Play</button>
+        <input id="radar-frame-slider" type="range" min="0" max="0" value="0" class="radar-slider" aria-label="Timeline radar" />
+        <span id="radar-time-label" class="radar-time">Live</span>
+      </div>
+    </div>
 
     <!-- 4. Right Rail stile Windy: 1 solo layer attivo alla volta + Rotta + Tema + Orologio -->
     <aside id="layer-rail" class="layer-rail glass-panel" aria-label="Livelli mappa e strumenti">
@@ -96,13 +101,6 @@
         <span>Orologio</span>
       </a>
     </aside>
-
-    <!-- 5. Radar Player compatto (visibile solo quando è attivo il layer Radar) -->
-    <div id="radar-bar" class="radar-bar glass-panel" hidden>
-      <button id="btn-radar-play" type="button" class="btn-mini">Play</button>
-      <input id="radar-frame-slider" type="range" min="0" max="0" value="0" class="radar-slider" aria-label="Timeline radar" />
-      <span id="radar-time-label" class="radar-time">Live</span>
-    </div>
 
     <!-- 6. Pannello flottante Rotta Costiera (traccia direttamente sulla mappa) -->
     <section id="route-panel" class="route-panel glass-panel" hidden aria-label="Calcolatore rotta costiera">
