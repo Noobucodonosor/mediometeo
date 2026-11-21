@@ -655,7 +655,10 @@ function initLeafletMap() {
   state.webcamLayerGroup = L.layerGroup().addTo(state.map);
 
   renderLocationsOnMap();
-  state.map.on("zoomend", () => renderLocationsOnMap());
+  state.map.on("zoomend", () => {
+    renderLocationsOnMap();
+    renderMapOverlays();
+  });
 
   // Click libero sulla Mappa Live -> seleziona coordinata e passa automaticamente a 1. Adesso
   state.map.on("click", async (ev) => {
@@ -794,7 +797,17 @@ function renderMapOverlays() {
   if (!state.weatherPkg) return;
   const obs = state.weatherPkg.observations_live || {};
 
-  // 2. Stazioni reali OMIRL (anemometri con freccia SVG + termo/pluvio badge) & idrometri
+  // 2. Stazioni reali OMIRL (anemometri con freccia SVG + termo/pluvio badge) & idrometri (Spatial Tiering ADR-0010)
+  const zoom = state.map ? state.map.getZoom() : 10;
+  const shouldShowFullBadge = (item) => {
+    const tier = item.display_tier ?? 1;
+    const sev = item.severity || "normal";
+    if (sev === "watch" || sev === "alert" || tier === 1) return true;
+    if (tier === 2 && zoom >= 11) return true;
+    if (tier >= 3 && zoom >= 13) return true;
+    return false;
+  };
+
   state.omirlLayerGroup.clearLayers();
   if (state.omirlVisible) {
     const stations = obs.all_weather_stations || obs.nearest_weather_stations || [];
@@ -803,12 +816,18 @@ function renderMapOverlays() {
       const windDeg = st.wind_dir_deg ?? 0;
       const arrowRotate = (windDeg + 90) % 360;
       const isStrong = (st.wind_knots || 0) >= 16;
+      const fullBadge = shouldShowFullBadge(st);
 
       let badgeHtml = "";
       let iconSize = [66, 22];
       let iconAnchor = [33, 11];
 
-      if (hasWind) {
+      if (!fullBadge) {
+        const dotColor = hasWind ? (isStrong ? "#f59e0b" : "#5ab9fc") : Number(st.precip_1h_mm || 0) > 0 ? "#5ab9fc" : "#94a3b8";
+        iconSize = [8, 8];
+        iconAnchor = [4, 4];
+        badgeHtml = `<div style="width:8px;height:8px;border-radius:50%;background:${dotColor};border:1px solid #0a0d14;opacity:0.85;box-shadow:0 1px 3px rgba(0,0,0,0.6);"></div>`;
+      } else if (hasWind) {
         const borderCol = isStrong ? "#f59e0b" : "#5ab9fc";
         const textCol = isStrong ? "#fbbf24" : "#e9edf3";
         const arrowColor = isStrong ? "#f59e0b" : "#5ab9fc";
@@ -867,9 +886,9 @@ function renderMapOverlays() {
         ? `Vento: <strong>${st.wind_knots} kt</strong> (${st.wind_kmh} km/h da ${windDeg}°) | Raff: ${st.gust_knots} kt<br>`
         : `Sensore: <strong>${st.sensor || "Termo/Pluvio"}</strong><br>`;
       m.bindTooltip(
-        `<strong>Centralina OMIRL: ${st.name} (${st.code})</strong> [${srcLabel}]<br>` +
+        `<strong>Centralina OMIRL: ${escapeHtml(st.name)} (${escapeHtml(st.code)})</strong> [${escapeHtml(srcLabel)}]<br>` +
           windLine +
-          `Temp: <strong>${st.temp_c}°C</strong> | Pioggia 1h: <strong>${st.precip_1h_mm} mm</strong> • Ore ${st.observed_at}`
+          `Temp: <strong>${escapeHtml(st.temp_c)}°C</strong> | Pioggia 1h: <strong>${escapeHtml(st.precip_1h_mm)} mm</strong> • Ore ${escapeHtml(st.observed_at)}`
       );
       m.on("click", async (ev) => {
         L.DomEvent.stopPropagation(ev);
@@ -887,7 +906,9 @@ function renderMapOverlays() {
           : hy.status_level === "orange"
           ? "#f97316"
           : "#10b981";
-      const badgeHtml = `<div style="
+      const fullHydro = shouldShowFullBadge(hy);
+      const badgeHtml = fullHydro
+        ? `<div style="
         background: rgba(10, 13, 20, 0.94);
         color: ${color};
         border: 1px solid ${color};
@@ -899,18 +920,19 @@ function renderMapOverlays() {
         font-weight: 600;
         white-space: nowrap;
         box-shadow: 0 2px 6px rgba(0,0,0,0.7);
-      ">IDRO ${hy.level_m}m</div>`;
+      ">IDRO ${escapeHtml(hy.level_m)}m</div>`
+        : `<div style="width:8px;height:8px;border-radius:50%;background:${color};border:1px solid #0a0d14;opacity:0.9;"></div>`;
       const icon = L.divIcon({
         html: badgeHtml,
         className: "",
-        iconSize: [76, 20],
-        iconAnchor: [38, 10],
+        iconSize: fullHydro ? [76, 20] : [8, 8],
+        iconAnchor: fullHydro ? [38, 10] : [4, 4],
       });
       const m = L.marker([hy.lat, hy.lon], { icon }).addTo(state.omirlLayerGroup);
       m.bindTooltip(
-        `<strong>Idrometro reale OMIRL: ${hy.name} (${hy.river})</strong><br>` +
-          `Livello misurato: <strong>${hy.level_m} m</strong> (Soglia gialla: ${hy.warn_threshold_m} m / Rossa: ${hy.alarm_threshold_m} m)<br>` +
-          `${hy.status_label} • Ore ${hy.observed_at}`
+        `<strong>Idrometro reale OMIRL: ${escapeHtml(hy.name)} (${escapeHtml(hy.river)})</strong><br>` +
+          `Livello misurato: <strong>${escapeHtml(hy.level_m)} m</strong> (Soglia gialla: ${escapeHtml(hy.warn_threshold_m)} m / Rossa: ${escapeHtml(hy.alarm_threshold_m)} m)<br>` +
+          `${escapeHtml(hy.status_label)} • Ore ${escapeHtml(hy.observed_at)}`
       );
     });
 
