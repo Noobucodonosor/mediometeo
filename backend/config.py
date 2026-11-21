@@ -16,7 +16,7 @@ class Settings:
     """Impostazioni applicative caricate da variabili d'ambiente (.env)."""
 
     app_name: str = "MedioMeteo Genova — Terra & Mare"
-    version: str = "1.0.0"
+    version: str = "2.6.0"
     db_path: str = os.getenv(
         "MEDIOMETEO_DB_PATH", str(BASE_DIR / "data" / "mediometeo.sqlite")
     )
