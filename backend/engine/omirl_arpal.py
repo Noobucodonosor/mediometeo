@@ -11,6 +11,7 @@ import math
 import re
 import time
 from typing import Any
+from zoneinfo import ZoneInfo
 import httpx
 
 
@@ -768,10 +769,27 @@ async def fetch_omirl_live_observations(
     }
 
 
+_ROME_TZ = ZoneInfo("Europe/Rome")
+
+
+def metno_utc_to_rome_hour_key(t_raw: str) -> str | None:
+    """Converte un timestamp ISO UTC di MET Norway nella chiave oraria locale Europe/Rome (YYYY-MM-DDTHH:00)."""
+    if not t_raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(t_raw.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        dt_rome = dt.astimezone(_ROME_TZ)
+        return dt_rome.strftime("%Y-%m-%dT%H:00")
+    except ValueError:
+        return t_raw[:13] + ":00" if len(t_raw) >= 13 else None
+
+
 async def fetch_metno_compact(
     client: httpx.AsyncClient, lat: float, lon: float
 ) -> dict[str, dict[str, float]]:
-    """Scarica il 5° modello indipendente MET Norway (YR.no)."""
+    """Scarica il 5° modello indipendente MET Norway (YR.no) allineato a Europe/Rome."""
     headers = {
         "User-Agent": "MedioMeteoGenova/2.2 https://github.com/Noobucodonosor/mediometeo"
     }
@@ -787,9 +805,9 @@ async def fetch_metno_compact(
 
     for entry in timeseries[:60]:
         t_raw = entry.get("time", "")
-        if not t_raw:
+        hour_key = metno_utc_to_rome_hour_key(t_raw)
+        if not hour_key:
             continue
-        hour_key = t_raw[:13] + ":00"
         instant = entry.get("data", {}).get("instant", {}).get("details", {})
         next_1h = entry.get("data", {}).get("next_1_hours", {}).get("details", {})
         ws_ms = float(instant.get("wind_speed") or 0.0)

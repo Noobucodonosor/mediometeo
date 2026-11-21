@@ -177,6 +177,7 @@ def fuse_hourly_step(
         pressures.append(mn_entry["pressure_hpa"])
         model_breakdown["met_norway"] = {
             "label": "MET Norway",
+            "available": True,
             "temp_c": mn_entry["temp_c"],
             "precip_mm": mn_entry["precip_mm"],
             "wind_kmh": mn_entry["wind_kmh"],
@@ -186,20 +187,17 @@ def fuse_hourly_step(
             "wind_dir_deg": mn_entry["wind_dir_deg"],
         }
     else:
-        # Se MET.no non ha quella singola ora, espone il riferimento per non lasciare buchi in tabella
-        arome_m = model_breakdown.get("meteofrance_arome_france_hd", {})
-        ecmwf_m = model_breakdown.get("ecmwf_ifs025", {})
-        ref_ws = ecmwf_m.get("wind_kmh") or arome_m.get("wind_kmh")
-        ref_wg = ecmwf_m.get("gust_kmh") or arome_m.get("gust_kmh")
+        # Nessuna sostituzione silenziosa con altri modelli: espone esplicitamente l'assenza dell'ora
         model_breakdown["met_norway"] = {
             "label": "MET Norway",
-            "temp_c": ecmwf_m.get("temp_c") or arome_m.get("temp_c"),
-            "precip_mm": ecmwf_m.get("precip_mm") or arome_m.get("precip_mm"),
-            "wind_kmh": ref_ws,
-            "wind_knots": round(ref_ws / 1.852, 1) if ref_ws is not None else None,
-            "gust_kmh": ref_wg,
-            "gust_knots": round(ref_wg / 1.852, 1) if ref_wg is not None else None,
-            "wind_dir_deg": ecmwf_m.get("wind_dir_deg") or arome_m.get("wind_dir_deg"),
+            "available": False,
+            "temp_c": None,
+            "precip_mm": None,
+            "wind_kmh": None,
+            "wind_knots": None,
+            "gust_kmh": None,
+            "gust_knots": None,
+            "wind_dir_deg": None,
         }
 
     def weighted_avg(items: list[tuple[float, float, str]], default: float = 0.0) -> float:
