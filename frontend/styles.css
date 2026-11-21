@@ -393,7 +393,8 @@ html, body {
   overflow: hidden;
 }
 .bottom-sheet[data-state="peek"] { height: 64px; }
-.bottom-sheet[data-state="medium"] { height: min(370px, 46dvh); }
+.bottom-sheet[data-state="medium"] { height: auto; max-height: 44dvh; }
+.bottom-sheet:not([data-state="peek"]) .sheet-peek-summary { display: none; }
 .bottom-sheet[data-state="expanded"] {
   height: min(760px, 84dvh);
   right: 14px;
@@ -735,9 +736,36 @@ html, body {
 }
 .leaflet-control-attribution a { color: var(--accent) !important; }
 
+[data-theme="dark"] .leaflet-tile-pane {
+  filter: invert(92%) hue-rotate(180deg) brightness(95%) contrast(90%);
+}
+
+.advanced-details {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.55rem 0.75rem;
+  background: rgba(128, 128, 128, 0.04);
+}
+.advanced-summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  user-select: none;
+}
+.advanced-body {
+  margin-top: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
 @media (max-width: 720px) {
   .metrics-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .charts-grid, .exp-grid-2 { grid-template-columns: 1fr; }
-  .bottom-sheet { left: 8px; right: 8px; bottom: 8px; }
-  .bottom-sheet[data-state="medium"] { height: 48dvh; }
+  .bottom-sheet { left: 8px; right: 8px; bottom: 20px; }
+  .bottom-sheet[data-state="medium"] { height: auto; max-height: 44dvh; }
+  .bottom-sheet[data-state="expanded"] { top: 68px; bottom: 8px; height: auto; max-height: none; }
+  .sheet-scroll { padding-bottom: 1.25rem; }
+  body.sheet-is-expanded .layer-rail { opacity: 0; pointer-events: none; }
 }

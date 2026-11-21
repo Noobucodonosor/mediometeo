@@ -61,10 +61,8 @@ function vectorStyle() {
 }
 
 function createBaseTileLayer() {
-  const variant = state.theme === "dark" ? "dark_all" : "rastertiles/voyager";
-  return L.tileLayer(`https://{s}.basemaps.cartocdn.com/${variant}/{z}/{x}/{y}{r}.png`, {
-    attribution: "&copy; OpenStreetMap &copy; CARTO",
-    subdomains: "abcd",
+  return L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap",
     maxZoom: 19,
   });
 }
@@ -355,6 +353,7 @@ function setSheetState(nextState) {
   const scroller = document.querySelector(".sheet-scroll");
   if (scroller) scroller.scrollTop = 0;
   if (sheet) sheet.setAttribute("data-state", nextState);
+  document.body.classList.toggle("sheet-is-expanded", nextState === "expanded");
   if (btn) {
     btn.textContent =
       nextState === "expanded" ? "Riduci" : nextState === "medium" ? "Dettagli" : "Apri";
@@ -508,22 +507,22 @@ function renderSheet() {
   if (peekSummary) {
     peekSummary.textContent = isSea
       ? `${wind.ligurian_name} ${wind.speed_knots} kt · Hs ${waves.significant_height_m}m`
-      : `${cur.temp_c.toFixed(1)}°C · ${wind.ligurian_name} ${wind.speed_knots} kt`;
+      : `${cur.temp_c.toFixed(1)}°C · ${Math.round(cur.wind_kmh)} km/h`;
   }
 
+  const rainPeak = Math.max(
+    ...(pkg.forecast?.hourly_48h || []).slice(0, 6).map((h) => h.precip_max_lam_mm ?? h.precip_mm ?? 0),
+    0
+  );
   const shortEl = document.getElementById("ai-short-summary");
   const fullEl = document.getElementById("ai-full-analysis");
   if (shortEl) {
     const convScore = pkg.nowcast?.ligurian_convergence?.convergence_score ?? 0;
-    const rainPeak = Math.max(
-      ...(pkg.forecast?.hourly_48h || []).slice(0, 6).map((h) => h.precip_max_lam_mm ?? h.precip_mm ?? 0),
-      0
-    );
     if (isSea) {
-      shortEl.textContent = `${waves.douglas.label} a ${loc.name} (Hs ${waves.significant_height_m}m, Tp ${waves.peak_period_s}s) con ${wind.ligurian_name} a ${wind.speed_knots} kt. Risacca a riva intorno a ${cp.bay_surge.shore_breaker_height_m}m.`;
+      shortEl.textContent = `${waves.douglas.label} a ${loc.name} con ${wind.ligurian_name} a ${wind.speed_knots} kt. Risacca a riva intorno a ${cp.bay_surge.shore_breaker_height_m}m.`;
     } else {
-      const rainHint = rainPeak >= 1.0 ? `Rovesci fino a ${rainPeak.toFixed(1)} mm/h nelle prossime 6h.` : convScore >= 50 ? `Convergenza attiva (${convScore}/100) con cielo coperto.` : "Situazione stabile senza precipitazioni di rilievo.";
-      shortEl.textContent = `${cur.weather_description} a ${loc.name} (${cur.temp_c.toFixed(1)}°C), ${wind.ligurian_name} ${wind.speed_knots} kt (raff. ${wind.gust_knots} kt). ${rainHint}`;
+      const rainHint = rainPeak >= 1.0 ? `Rovesci fino a ${rainPeak.toFixed(1)} mm/h nelle prossime 6h.` : convScore >= 60 ? "Possibili addensamenti locali." : "Asciutto nelle prossime ore.";
+      shortEl.textContent = `${cur.weather_description} a ${loc.name}, ${wind.ligurian_name.toLowerCase()} ${Math.round(cur.wind_kmh)} km/h. ${rainHint}`;
     }
   }
   if (fullEl) {
@@ -532,18 +531,29 @@ function renderSheet() {
 
   const metricsEl = document.getElementById("sheet-metrics-grid");
   if (metricsEl) {
+    const perc = landRisk.thermo_comfort?.perceived_temp_c ?? cur.temp_c;
+    const tempSub = Math.abs(perc - cur.temp_c) >= 1.0 ? `Percepita ${perc}°C` : cur.weather_description;
+    const precip1h = landRisk.hydrogeological.precip_1h_mm ?? 0;
+    const precip24h = landRisk.hydrogeological.precip_24h_mm ?? 0;
+    const rainActive = precip1h > 0 || precip24h >= 10 || rainPeak >= 2.0;
+    const rainSub = rainActive
+      ? landRisk.hydrogeological.label
+      : rainPeak >= 0.5
+        ? "Rovesci deboli in 6h"
+        : "Asciutto nelle 6h";
+
     const cards = isSea
       ? [
-          { label: "Vento e raffica", value: `${wind.speed_knots} / ${wind.gust_knots} kt`, sub: `${wind.ligurian_name} ${wind.cardinal}` },
-          { label: "Onda Hs / Hmax", value: `${waves.significant_height_m} / ${waves.max_height_m} m`, sub: `Tp ${waves.peak_period_s}s ${waves.direction_cardinal}` },
-          { label: "Risacca e marea", value: `${cp.bay_surge.shore_breaker_height_m} m`, sub: `${cp.tides.is_synthetic ? "Marea stimata" : "Marea"} ${cp.tides.current_height_cm}cm` },
-          { label: "Accordo 5 modelli", value: `${cur.confidence_pct}%`, sub: `${cur.pressure_hpa} hPa` },
+          { label: "Vento", value: `${wind.speed_knots} kt`, sub: `Raffica ${wind.gust_knots} kt · ${wind.ligurian_name}` },
+          { label: "Onda", value: `${waves.significant_height_m} m`, sub: `Max ${waves.max_height_m}m · Tp ${waves.peak_period_s}s` },
+          { label: "Risacca", value: `${cp.bay_surge.shore_breaker_height_m} m`, sub: `${cp.tides.is_synthetic ? "Marea stimata" : "Marea"} ${cp.tides.current_height_cm}cm` },
+          { label: "Pressione", value: `${Math.round(cur.pressure_hpa)} hPa`, sub: cur.pressure_trend_label || "Stabile" },
         ]
       : [
-          { label: "Temperatura", value: `${cur.temp_c.toFixed(1)}°C`, sub: `Perc. ${landRisk.thermo_comfort?.perceived_temp_c ?? cur.temp_c}°C` },
-          { label: "Pioggia 1h", value: `${landRisk.hydrogeological.precip_1h_mm} mm/h`, sub: landRisk.hydrogeological.label },
-          { label: "Vento", value: `${cur.wind_kmh} km/h`, sub: `${wind.ligurian_name} (${wind.speed_knots} kt)` },
-          { label: "Pressione", value: `${cur.pressure_hpa} hPa`, sub: `Accordo ${cur.confidence_pct}%` },
+          { label: "Temperatura", value: `${cur.temp_c.toFixed(1)}°C`, sub: tempSub },
+          { label: "Pioggia 1h", value: `${precip1h} mm/h`, sub: rainSub },
+          { label: "Vento", value: `${Math.round(cur.wind_kmh)} km/h`, sub: `${wind.ligurian_name} · ${wind.cardinal}` },
+          { label: "Pressione", value: `${Math.round(cur.pressure_hpa)} hPa`, sub: cur.pressure_trend_label || "Stabile" },
         ];
     metricsEl.innerHTML = cards
       .map((c) => `<div class="metric-chip"><span>${escapeHtml(c.label)}</span><strong>${escapeHtml(c.value)}</strong><span>${escapeHtml(c.sub)}</span></div>`)
@@ -558,9 +568,10 @@ function renderSheet() {
       .slice(0, 24)
       .map((h) => {
         const hh = (h.time.split("T")[1] || h.time).slice(0, 5);
-        const mainV = isSea ? `${h.wind_knots}kt` : `${Math.round(h.temp_c)}°`;
-        const subV = isSea ? `Hs ${h.wave_hs_m}m` : `${h.wind_knots}kt`;
-        const rainV = h.precip_mm > 0 ? `${h.precip_mm}mm` : "0mm";
+        const windKmh = Math.round(h.wind_kmh ?? (h.wind_knots ?? 0) * 1.852);
+        const mainV = isSea ? `${Math.round(h.wind_knots)} kt` : `${Math.round(h.temp_c)}°`;
+        const subV = isSea ? `Hs ${h.wave_hs_m}m` : `${windKmh} km/h`;
+        const rainV = h.precip_mm > 0 ? `${h.precip_mm}mm` : "—";
         return `<div class="hour-cell" role="listitem"><span class="h-time">${escapeHtml(hh)}</span><span class="h-main">${escapeHtml(mainV)}</span><span class="h-sub">${escapeHtml(subV)}</span><span class="h-rain">${escapeHtml(rainV)}</span></div>`;
       })
       .join("");
@@ -610,6 +621,9 @@ function renderExpandedDetails(pkg) {
       })
       .join("");
   }
+
+  const hySection = document.getElementById("hydrometers-section");
+  if (hySection) hySection.hidden = state.mode === "sea";
 
   const hyGrid = document.getElementById("omirl-hydrometers-grid");
   const hydros = pkg.observations_live?.nearest_river_hydrometers || [];
@@ -832,6 +846,11 @@ function bindEvents() {
     updateRadarLayer();
   });
 
+  document.getElementById("btn-sheet-ask")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    setSheetState("expanded");
+    setTimeout(() => document.getElementById("ask-input")?.focus(), 80);
+  });
   document.getElementById("btn-sheet-expand")?.addEventListener("click", (e) => {
     e.stopPropagation();
     cycleSheetState();

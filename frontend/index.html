@@ -28,7 +28,7 @@
           id="loc-search-input"
           type="search"
           class="search-input"
-          placeholder="Cerca Genova, Portofino, una rada..."
+          placeholder="Cerca località in Liguria..."
           aria-label="Cerca località Provincia di Genova"
           autocomplete="off"
         />
@@ -148,6 +148,7 @@
             <span id="sheet-peek-summary" class="sheet-peek-summary">--°C · -- kt</span>
           </div>
           <div class="sheet-header-actions">
+            <button id="btn-sheet-ask" type="button" class="btn-expand" title="Fai una domanda su questo punto">Chiedi</button>
             <button id="btn-sheet-refresh" type="button" class="pill-icon-btn" title="Aggiorna dati" aria-label="Aggiorna dati live">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.4-3.7"/><path d="M13.5 2.5v3h-3"/></svg>
             </button>
@@ -157,7 +158,7 @@
       </div>
 
       <div class="sheet-scroll">
-        <!-- LIVELLO MEDIO: Sintesi umana 2 frasi + 4 metriche + Timeline 24h + AI Ask -->
+        <!-- LIVELLO MEDIO: Sintesi umana 2 frasi + 4 metriche + Timeline 24h -->
         <div class="sheet-medium">
           <p id="ai-short-summary" class="ai-short-summary">Caricamento analisi locale...</p>
 
@@ -166,72 +167,76 @@
           <div class="hourly-wrap">
             <div id="hourly-strip" class="hourly-strip" role="list" aria-label="Previsione oraria prossime 24 ore"></div>
           </div>
+        </div>
 
+        <!-- LIVELLO ESPANSO: AI Ask, Bollettino ARPAL, Idrometri (solo Terra) & Modalità Avanzata -->
+        <div class="sheet-expanded">
           <form id="ask-form" class="ask-bar">
             <input
               id="ask-input"
               type="text"
               class="ask-input"
               maxlength="240"
-              placeholder="Chiedi qualcosa su questo punto (es. piove stasera? com'è il mare alle 16?)..."
+              placeholder="Chiedi su questo punto (es. piove stasera? com'è il mare?)..."
               aria-label="Fai una domanda meteo su questo punto"
             />
             <button id="ask-submit" type="submit" class="btn-primary-pill">Chiedi</button>
           </form>
           <div id="ask-answer" class="ask-answer" hidden></div>
-        </div>
-
-        <!-- LIVELLO ESPANSO: Analisi tecnica, 5 Modelli, Grafici, Stazioni OMIRL, Idrometri & ARPAL -->
-        <div class="sheet-expanded">
-          <div class="exp-section">
-            <h2>Analisi sinottica completa</h2>
-            <p id="ai-full-analysis" class="ai-full-analysis"></p>
-          </div>
-          <div class="exp-section">
-            <div class="exp-head">
-              <h2>Confronto 5 Modelli (AROME · ICON-D2 · ECMWF · GFS · MET.no)</h2>
-              <div id="models-divergence-summary" class="divergence-pill">--</div>
-            </div>
-            <div class="charts-grid">
-              <div class="chart-card"><canvas id="chart-multimodel"></canvas></div>
-              <div class="chart-card"><canvas id="chart-wind-wave"></canvas></div>
-            </div>
-            <div class="table-wrap">
-              <table class="models-table">
-                <thead>
-                  <tr>
-                    <th>Ora</th>
-                    <th>Consenso</th>
-                    <th>AROME</th>
-                    <th>ICON-D2</th>
-                    <th>ECMWF</th>
-                    <th>GFS</th>
-                    <th>MET.no</th>
-                    <th>Δ</th>
-                    <th>Pioggia</th>
-                    <th>Onda</th>
-                  </tr>
-                </thead>
-                <tbody id="models-5-hourly-tbody"></tbody>
-              </table>
-            </div>
-          </div>
 
           <div class="exp-grid-2">
             <div class="exp-section">
-              <h2>Stazioni OMIRL vicine</h2>
-              <div id="omirl-stations-grid" class="obs-list"></div>
+              <h2>Bollettino Ufficiale ARPAL Liguria</h2>
+              <div id="arpal-bulletin-box" class="arpal-list"></div>
             </div>
-            <div class="exp-section">
+            <div id="hydrometers-section" class="exp-section">
               <h2>Idrometri torrenti</h2>
               <div id="omirl-hydrometers-grid" class="obs-list"></div>
             </div>
           </div>
 
-          <div class="exp-section">
-            <h2>Bollettino Ufficiale ARPAL Liguria</h2>
-            <div id="arpal-bulletin-box" class="arpal-list"></div>
-          </div>
+          <details id="advanced-meteo-details" class="advanced-details">
+            <summary class="advanced-summary">Modalità avanzata: 5 Modelli, Analisi Sinottica &amp; Sensori OMIRL</summary>
+            <div class="advanced-body">
+              <div class="exp-section">
+                <h2>Analisi sinottica completa</h2>
+                <p id="ai-full-analysis" class="ai-full-analysis"></p>
+              </div>
+              <div class="exp-section">
+                <div class="exp-head">
+                  <h2>Confronto 5 Modelli (AROME · ICON-D2 · ECMWF · GFS · MET.no)</h2>
+                  <div id="models-divergence-summary" class="divergence-pill">--</div>
+                </div>
+                <div class="charts-grid">
+                  <div class="chart-card"><canvas id="chart-multimodel"></canvas></div>
+                  <div class="chart-card"><canvas id="chart-wind-wave"></canvas></div>
+                </div>
+                <div class="table-wrap">
+                  <table class="models-table">
+                    <thead>
+                      <tr>
+                        <th>Ora</th>
+                        <th>Consenso</th>
+                        <th>AROME</th>
+                        <th>ICON-D2</th>
+                        <th>ECMWF</th>
+                        <th>GFS</th>
+                        <th>MET.no</th>
+                        <th>Δ</th>
+                        <th>Pioggia</th>
+                        <th>Onda</th>
+                      </tr>
+                    </thead>
+                    <tbody id="models-5-hourly-tbody"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="exp-section">
+                <h2>Stazioni OMIRL vicine</h2>
+                <div id="omirl-stations-grid" class="obs-list"></div>
+              </div>
+            </div>
+          </details>
 
           <footer class="sheet-disclaimers">
             <div id="disclaimer-land-text"></div>
