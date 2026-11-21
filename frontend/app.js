@@ -366,7 +366,6 @@ function bindUIEvents() {
     state.radarVisible = !state.radarVisible;
     e.currentTarget.classList.toggle("active", state.radarVisible);
     e.currentTarget.setAttribute("aria-pressed", state.radarVisible ? "true" : "false");
-    e.currentTarget.textContent = `Radar: ${state.radarVisible ? "ON" : "OFF"}`;
     updateRadarLayer();
   });
 
@@ -374,7 +373,6 @@ function bindUIEvents() {
     state.omirlVisible = !state.omirlVisible;
     e.currentTarget.classList.toggle("active", state.omirlVisible);
     e.currentTarget.setAttribute("aria-pressed", state.omirlVisible ? "true" : "false");
-    e.currentTarget.textContent = `Sensori OMIRL: ${state.omirlVisible ? "ON" : "OFF"}`;
     renderMapOverlays();
   });
 
@@ -382,7 +380,6 @@ function bindUIEvents() {
     state.webcamsVisible = !state.webcamsVisible;
     e.currentTarget.classList.toggle("active", state.webcamsVisible);
     e.currentTarget.setAttribute("aria-pressed", state.webcamsVisible ? "true" : "false");
-    e.currentTarget.textContent = `Webcam: ${state.webcamsVisible ? "ON" : "OFF"}`;
     renderMapOverlays();
   });
 
@@ -390,7 +387,6 @@ function bindUIEvents() {
     state.ampVisible = !state.ampVisible;
     e.currentTarget.classList.toggle("active", state.ampVisible);
     e.currentTarget.setAttribute("aria-pressed", state.ampVisible ? "true" : "false");
-    e.currentTarget.textContent = `Zone AMP: ${state.ampVisible ? "ON" : "OFF"}`;
     renderMapOverlays();
   });
 
@@ -1652,33 +1648,24 @@ function renderOmirlObservationsAndWebcams(obs, cur, seaCond) {
     })
     .join("");
 
-  // 3. Galleria Webcam Live (Immagine JPEG Live OMIRL o Orizzonte Fisico SVG Mare/Cielo)
+  // 3. Galleria Webcam Live (Solo Immagine JPEG Live OMIRL o pannello telemetrico piatto senza grafiche finte)
   const camGrid = document.getElementById("live-webcams-grid");
   const cams = obs.nearest_webcams || [];
   const hs = seaCond?.waves?.significant_height_m ?? 0.4;
   const windKt = seaCond?.wind?.speed_knots ?? 6;
-  const waveAmp = Math.min(22, Math.max(4, Math.round(hs * 10)));
 
   camGrid.innerHTML = cams
     .map((cam) => {
       const safeCamUrl = sanitizeHttpUrl(cam.live_image_url);
       const previewStyle = safeCamUrl
         ? `background: linear-gradient(180deg, rgba(10,13,20,0.18) 0%, rgba(10,13,20,0.88) 100%), url('${safeCamUrl}') center/cover no-repeat;`
-        : `background: linear-gradient(180deg, #0d1b2e 0%, #0a1424 58%, #0a0d14 100%);`;
-      const svgBackdrop = safeCamUrl
-        ? ""
-        : `<svg viewBox="0 0 320 175" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;opacity:0.45;pointer-events:none;">
-            <path d="M0,${115 - waveAmp} Q80,${115 + waveAmp} 160,${115 - waveAmp} T320,${115 - waveAmp} L320,175 L0,175 Z" fill="#0284c7" />
-            <path d="M0,${132 + waveAmp / 2} Q80,${132 - waveAmp} 160,${132 + waveAmp / 2} T320,${132 + waveAmp / 2} L320,175 L0,175 Z" fill="#0369a1" />
-            <circle cx="265" cy="40" r="14" fill="rgba(90,185,252,0.28)" />
-          </svg>`;
+        : `background: #0d1522;`;
       return `
         <div class="webcam-card">
           <div class="webcam-preview" style="${previewStyle}">
-            ${svgBackdrop}
             <div style="display:flex;justify-content:space-between;align-items:center;z-index:2;gap:0.4rem;">
               <span class="badge-pill ${safeCamUrl ? "level-green" : "level-physics"}">
-                ${SVG_ICONS.camera} ${safeCamUrl ? "Immagine live OMIRL" : "Telemetria & stream"}
+                ${SVG_ICONS.camera} ${safeCamUrl ? "Immagine live OMIRL" : "Feed esterno"}
               </span>
               <span class="webcam-dist-tag">
                 a ${escapeHtml(cam.distance_km)} km
