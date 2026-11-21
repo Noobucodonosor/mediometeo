@@ -275,14 +275,11 @@
     <section id="tab-mappa" class="tab-panel active" role="tabpanel" aria-labelledby="btn-tab-mappa">
       <article class="map-stage-card">
         <div class="map-floating-top">
-          <div class="map-hint-chip">
-            <span><strong>Clicca un punto sulla mappa</strong> per aprire la scheda Adesso</span>
-          </div>
-          <div class="map-layers-pills">
-            <button id="btn-toggle-radar" type="button" class="map-pill active" aria-pressed="true">Radar: ON</button>
-            <button id="btn-toggle-omirl" type="button" class="map-pill active" aria-pressed="true">Sensori OMIRL: ON</button>
-            <button id="btn-toggle-webcams" type="button" class="map-pill active" aria-pressed="true">Webcam: ON</button>
-            <button id="btn-toggle-amp" type="button" class="map-pill active" aria-pressed="true">Zone AMP: ON</button>
+          <div class="map-layers-pills" role="group" aria-label="Livelli mappa">
+            <button id="btn-toggle-radar" type="button" class="map-pill active" aria-pressed="true">Radar</button>
+            <button id="btn-toggle-omirl" type="button" class="map-pill active" aria-pressed="true">OMIRL</button>
+            <button id="btn-toggle-webcams" type="button" class="map-pill active" aria-pressed="true">Webcam</button>
+            <button id="btn-toggle-amp" type="button" class="map-pill active" aria-pressed="true">AMP</button>
           </div>
         </div>
 
