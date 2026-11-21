@@ -534,12 +534,10 @@ function renderSheet() {
     const perc = landRisk.thermo_comfort?.perceived_temp_c ?? cur.temp_c;
     const tempSub = Math.abs(perc - cur.temp_c) >= 1.0 ? `Percepita ${perc}°C` : cur.weather_description;
     const precip1h = landRisk.hydrogeological.precip_1h_mm ?? 0;
-    const precip24h = landRisk.hydrogeological.precip_24h_mm ?? 0;
-    const rainActive = precip1h > 0 || precip24h >= 10 || rainPeak >= 2.0;
-    const rainSub = rainActive
+    const rainSub = precip1h > 0
       ? landRisk.hydrogeological.label
-      : rainPeak >= 0.5
-        ? "Rovesci deboli in 6h"
+      : rainPeak >= 1.0
+        ? `Rovesci attesi (${rainPeak.toFixed(1)} mm/h)`
         : "Asciutto nelle 6h";
 
     const cards = isSea

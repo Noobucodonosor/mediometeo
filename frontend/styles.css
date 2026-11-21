@@ -395,11 +395,13 @@ html, body {
 .bottom-sheet[data-state="peek"] { height: 64px; }
 .bottom-sheet[data-state="medium"] { height: auto; max-height: 44dvh; }
 .bottom-sheet:not([data-state="peek"]) .sheet-peek-summary { display: none; }
+.bottom-sheet[data-state="expanded"] #btn-sheet-ask { display: none; }
 .bottom-sheet[data-state="expanded"] {
   height: min(760px, 84dvh);
   right: 14px;
   z-index: 950;
 }
+.sheet-medium, .sheet-expanded, .exp-section { min-width: 0; }
 
 .sheet-header {
   padding: 0.4rem 1rem 0.55rem;
@@ -763,9 +765,9 @@ html, body {
 @media (max-width: 720px) {
   .metrics-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .charts-grid, .exp-grid-2 { grid-template-columns: 1fr; }
-  .bottom-sheet { left: 8px; right: 8px; bottom: 20px; }
+  .bottom-sheet { left: 8px; right: 8px; bottom: 20px; width: auto; max-width: calc(100vw - 16px); }
   .bottom-sheet[data-state="medium"] { height: auto; max-height: 44dvh; }
-  .bottom-sheet[data-state="expanded"] { top: 68px; bottom: 8px; height: auto; max-height: none; }
+  .bottom-sheet[data-state="expanded"] { top: 68px; bottom: 22px; right: 8px; height: auto; max-height: none; }
   .sheet-scroll { padding-bottom: 1.25rem; }
   body.sheet-is-expanded .layer-rail { opacity: 0; pointer-events: none; }
 }
