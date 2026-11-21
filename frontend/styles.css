@@ -1323,6 +1323,45 @@ select:focus-visible {
   font-weight: 500;
 }
 
+.loc-picker-trigger-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.fav-toggle-btn {
+  padding: 0.38rem 0.55rem;
+  color: var(--p-muted);
+}
+.fav-toggle-btn[aria-pressed="true"] {
+  color: var(--p-accent);
+  border-color: rgba(90, 185, 252, 0.55);
+  background: rgba(90, 185, 252, 0.12);
+}
+.fav-toggle-btn[aria-pressed="true"] svg polygon {
+  fill: currentColor;
+}
+.fav-chips-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--p-hairline);
+}
+.fav-chips-bar:empty { display: none; }
+.fav-chip {
+  background: var(--p-surface-elevated);
+  color: var(--p-ink);
+  border: 1px solid var(--p-hairline);
+  border-radius: var(--r-sm);
+  padding: 0.25rem 0.55rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.fav-chip.active {
+  border-color: var(--p-accent);
+  color: var(--p-accent);
+}
+
 /* Conditional Early-Warning Banner (hidden in normal weather) */
 .watch-banner {
   background: rgba(245, 158, 11, 0.12);

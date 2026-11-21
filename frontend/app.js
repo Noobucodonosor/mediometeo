@@ -249,6 +249,36 @@ function bindUIEvents() {
 
   window.__closeLocPicker = () => setPickerOpen(false);
 
+  const btnToggleFav = document.getElementById("btn-toggle-fav");
+  if (btnToggleFav) {
+    btnToggleFav.addEventListener("click", () => {
+      if (!state.selectedLocationId) return;
+      let favs = loadFavorites();
+      if (favs.includes(state.selectedLocationId)) {
+        favs = favs.filter((id) => id !== state.selectedLocationId);
+      } else {
+        favs = [state.selectedLocationId, ...favs].slice(0, 5);
+      }
+      saveFavorites(favs);
+      renderFavoritesBar();
+    });
+  }
+
+  const favChipsBar = document.getElementById("fav-chips-bar");
+  if (favChipsBar) {
+    favChipsBar.addEventListener("click", async (ev) => {
+      const chip = ev.target.closest(".fav-chip");
+      if (!chip) return;
+      const favId = chip.getAttribute("data-fav-id");
+      if (!favId) return;
+      if (pickerPanel && pickerBtn) {
+        pickerPanel.hidden = true;
+        pickerBtn.setAttribute("aria-expanded", "false");
+      }
+      await selectLocationById(favId, false);
+    });
+  }
+
   if (pickerBtn && pickerPanel) {
     pickerBtn.addEventListener("click", (ev) => {
       ev.stopPropagation();
@@ -478,6 +508,51 @@ async function loadLocationsCatalog() {
 
   populateLocationSelect();
   populateRouteWaypoints();
+}
+
+const FAV_STORAGE_KEY = "mediometeo_favorites_v1";
+const DEFAULT_FAVORITES = ["COM-GENOVA", "COM-PORTOFINO", "QRT-GENOVA-MARASSI", "COM-ARENZANO"];
+
+function loadFavorites() {
+  try {
+    const raw = localStorage.getItem(FAV_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length) {
+        return parsed.slice(0, 5);
+      }
+    }
+  } catch (_) {}
+  return [...DEFAULT_FAVORITES];
+}
+
+function saveFavorites(ids) {
+  try {
+    localStorage.setItem(FAV_STORAGE_KEY, JSON.stringify(ids.slice(0, 5)));
+  } catch (_) {}
+}
+
+function renderFavoritesBar() {
+  const bar = document.getElementById("fav-chips-bar");
+  const toggleBtn = document.getElementById("btn-toggle-fav");
+  const favs = loadFavorites();
+
+  if (toggleBtn) {
+    const isFav = !state.customCoords && favs.includes(state.selectedLocationId);
+    toggleBtn.setAttribute("aria-pressed", isFav ? "true" : "false");
+  }
+  if (!bar) return;
+
+  const validFavs = favs
+    .map((id) => state.locations.find((l) => l.id === id))
+    .filter(Boolean);
+
+  bar.innerHTML = validFavs
+    .map((loc) => {
+      const active = !state.customCoords && loc.id === state.selectedLocationId;
+      return `<button type="button" class="fav-chip${active ? " active" : ""}" data-fav-id="${escapeHtml(loc.id)}">${escapeHtml(loc.name)}</button>`;
+    })
+    .join("");
 }
 
 function populateLocationSelect() {
@@ -1251,6 +1326,7 @@ function renderDashboard() {
 
   // Refresh selected option state in unified picker
   populateLocationSelect();
+  renderFavoritesBar();
 
   // Popolamento HUD adattiva 4-metriche Terra / Mare
   const isSeaMode = state.mode === "sea";

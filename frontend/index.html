@@ -27,24 +27,39 @@
       </div>
     </div>
 
-    <!-- Selettore località unificato (ricerca + categoria in unico popover) -->
+    <!-- Selettore località unificato (ricerca + categoria + preferiti in unico popover) -->
     <div class="loc-picker-wrap">
-      <button
-        id="loc-picker-btn"
-        type="button"
-        class="loc-picker-btn"
-        aria-haspopup="dialog"
-        aria-expanded="false"
-        aria-label="Seleziona località Provincia di Genova"
-      >
-        <span id="loc-picker-label" class="loc-picker-label">Genova</span>
-        <span id="loc-picker-meta" class="loc-picker-meta">Comune</span>
-        <svg class="ui-chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M3 4.5L6 7.5L9 4.5"/>
-        </svg>
-      </button>
+      <div class="loc-picker-trigger-row">
+        <button
+          id="loc-picker-btn"
+          type="button"
+          class="loc-picker-btn"
+          aria-haspopup="dialog"
+          aria-expanded="false"
+          aria-label="Seleziona località Provincia di Genova"
+        >
+          <span id="loc-picker-label" class="loc-picker-label">Genova</span>
+          <span id="loc-picker-meta" class="loc-picker-meta">Comune</span>
+          <svg class="ui-chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 4.5L6 7.5L9 4.5"/>
+          </svg>
+        </button>
+        <button
+          id="btn-toggle-fav"
+          type="button"
+          class="btn-action fav-toggle-btn"
+          aria-pressed="false"
+          aria-label="Salva o rimuovi località dai preferiti"
+          title="Salva o rimuovi dai preferiti"
+        >
+          <svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true">
+            <polygon points="8,1.8 9.9,5.7 14.2,6.3 11.1,9.3 11.8,13.6 8,11.6 4.2,13.6 4.9,9.3 1.8,6.3 6.1,5.7"/>
+          </svg>
+        </button>
+      </div>
 
       <div id="loc-picker-panel" class="loc-picker-panel" role="dialog" aria-label="Cerca località" hidden>
+        <div id="fav-chips-bar" class="fav-chips-bar" aria-label="Preferiti 1-tap"></div>
         <div class="loc-picker-search-row">
           <input
             id="loc-search-input"
