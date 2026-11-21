@@ -245,12 +245,23 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return round(2 * r * math.atan2(math.sqrt(a), math.sqrt(1 - a)), 2)
 
 
-def is_omirl_refdate_fresh(ref_date_str: str | None) -> bool:
-    """Verifica che la misura del sensore OMIRL non sia vecchia di anni (es. CHIRI fermo al 2023)."""
+def is_omirl_refdate_fresh(
+    ref_date_str: str | None,
+    max_age_hours: float = 6.0,
+    now: datetime | None = None,
+) -> bool:
+    """Verifica che la misura del sensore OMIRL sia recente (entro `max_age_hours`) senza hardcoding dell'anno."""
     if not ref_date_str:
         return False
-    # Tutti i sensori attivi hanno anno corrente (>= 2025/2026)
-    return ref_date_str[:4] in ("2025", "2026", "2027")
+    try:
+        dt = datetime.fromisoformat(ref_date_str.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_ROME_TZ)
+    ref_now = now or datetime.now(_ROME_TZ)
+    age_seconds = (ref_now - dt).total_seconds()
+    return -3600.0 <= age_seconds <= max_age_hours * 3600.0
 
 
 def extract_var_data(html: str) -> dict[str, Any] | None:
@@ -522,6 +533,7 @@ async def fetch_omirl_live_observations(
             "wind_knots": round(wind_kmh / 1.852, 1),
             "gust_kmh": round(gust_kmh, 1),
             "gust_knots": round(gust_kmh / 1.852, 1),
+            "gust_estimated": has_live_wind,
             "wind_dir_deg": round(wind_dir_deg, 0),
             "has_live_wind": has_live_wind,
             "has_live_temp": code in termo_by_code,

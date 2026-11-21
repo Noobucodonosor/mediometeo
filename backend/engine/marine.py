@@ -86,6 +86,7 @@ def extract_tides_from_sea_level(
     valid_vals = [float(v) for v in sea_levels_m if v is not None]
     if not valid_vals or len(times) < 3:
         return {
+            "is_synthetic": True,
             "current_height_cm": 18,
             "current_phase": "Stazionaria",
             "range_cm": 28,
@@ -143,6 +144,7 @@ def extract_tides_from_sea_level(
         phase = "Stanca di Marea (≈ Picco)"
 
     return {
+        "is_synthetic": False,
         "current_height_cm": int(round((cur_v - base_datum) * 100)),
         "current_phase": phase,
         "range_cm": int(round((max_datum - base_datum) * 100)),

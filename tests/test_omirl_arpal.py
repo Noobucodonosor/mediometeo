@@ -57,10 +57,22 @@ def test_omirl_bulk_hydrometers_meta_and_freshness_filter() -> None:
     assert "GERIV" in GENOVA_HYDROMETERS_META
     assert "CARPB" in GENOVA_HYDROMETERS_META
 
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    rome_now = datetime.now(ZoneInfo("Europe/Rome"))
+    fresh_ts = (rome_now - timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%S")
+    stale_same_year_ts = (rome_now - timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%S")
+    future_2028_now = datetime(2028, 5, 1, 12, 30, tzinfo=ZoneInfo("Europe/Rome"))
+
     # Sensore CHIRI (Chiavari) fermo al 2023 deve essere scartato
     assert is_omirl_refdate_fresh("2023-04-19T14:40:00") is False
-    # Sensore del 2026 deve essere considerato fresco
-    assert is_omirl_refdate_fresh("2026-11-09T22:00:00") is True
+    # Sensore fermo da >6h nello stesso anno deve essere scartato
+    assert is_omirl_refdate_fresh(stale_same_year_ts) is False
+    # Sensore aggiornato entro 6h deve essere considerato fresco
+    assert is_omirl_refdate_fresh(fresh_ts) is True
+    # Nessuna time-bomb post-2027
+    assert is_omirl_refdate_fresh("2028-05-01T12:00:00", now=future_2028_now) is True
 
 
 async def test_fetch_omirl_station_chart_normalized_output() -> None:
@@ -115,7 +127,10 @@ async def test_fetch_omirl_station_chart_normalized_output() -> None:
 
 async def test_fetch_omirl_live_observations_multi_sensor_fusion_and_buoy() -> None:
     """Verifica fusione Vento+Termo+Pluvio, flag has_live_*, Boa Capo Mele e total_weather_stations (TASK-DATA-03)."""
-    fresh_date = "2026-11-16T10:30:00"
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    fresh_date = (datetime.now(ZoneInfo("Europe/Rome")) - timedelta(minutes=15)).strftime("%Y-%m-%dT%H:%M:%S")
     stale_date = "2023-04-19T14:40:00"
 
     bulk_mock: dict[str, list[dict[str, object]]] = {
