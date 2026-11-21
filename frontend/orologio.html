@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0a0d14">
+  <meta name="description" content="HUD nautico da polso per il Golfo di Genova: vento reale, onda e swell su bussola vettoriale, velocità richiesta e orario di inversione rotta.">
+  <title>MedioMeteo Genova — MEDIOMETEO HUD da Polso</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wdth,wght@85..100,400..700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark light;
+      --p-bg: #0a0d14;
+      --p-surface: #131824;
+      --p-surface-elevated: #181f2e;
+      --p-ink: #e9edf3;
+      --p-muted: #8891a1;
+      --p-accent: #5ab9fc;
+      --p-wind: #10b981;
+      --p-amber: #fbbf24;
+      --p-hairline: rgba(233, 237, 243, 0.14);
+      --p-hairline-accent: rgba(90, 185, 252, 0.42);
+      --r-sm: 4px;
+      --r-md: 6px;
+      --font-sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      scrollbar-width: thin;
+      scrollbar-color: #2b3548 #0a0d14;
+      accent-color: #5ab9fc;
+    }
+
+    @supports not (scrollbar-color: auto) {
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-thumb { background: #2b3548; border-radius: 4px; }
+      ::-webkit-scrollbar-track { background: #0a0d14; }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      font-size: 16px;
+      line-height: 1.45;
+      background: var(--p-bg);
+      color: var(--p-ink);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      padding: 12px 8px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    h1, h2 { text-wrap: balance; }
+    p { text-wrap: pretty; }
+
+    .mono-num {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .watch-shell {
+      width: 100%;
+      max-width: 396px;
+      background: var(--p-surface);
+      border: 1px solid var(--p-hairline-accent);
+      border-radius: var(--r-md);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .watch-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--p-hairline);
+      padding-bottom: 8px;
+    }
+
+    .watch-brand-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .watch-title {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      color: var(--p-accent);
+    }
+
+    .watch-clock {
+      font-size: 0.9375rem;
+      font-weight: 500;
+      color: var(--p-ink);
+      flex-shrink: 0;
+    }
+
+    .hud-controls-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .hud-field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .hud-field-label {
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--p-muted);
+      line-height: 1.2;
+    }
+
+    .hud-input {
+      width: 100%;
+      min-width: 0;
+      min-height: 44px;
+      background: var(--p-bg);
+      color: var(--p-ink);
+      border: 1px solid var(--p-hairline);
+      border-radius: var(--r-sm);
+      padding: 8px 10px;
+      font-family: var(--font-sans);
+      font-size: 1rem;
+      font-weight: 500;
+      transition: border-color 140ms ease, background-color 140ms ease;
+    }
+
+    .hud-input.mono-num {
+      font-family: var(--font-mono);
+    }
+
+    .hud-input:hover {
+      border-color: var(--p-hairline-accent);
+    }
+
+    .hud-input:focus-visible,
+    .btn-back:focus-visible {
+      outline: 2px solid var(--p-accent);
+      outline-offset: 2px;
+    }
+
+    .hud-compass-card {
+      background: var(--p-bg);
+      border: 1px solid var(--p-hairline);
+      border-radius: var(--r-md);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .hud-compass-head {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .hud-compass-target {
+      font-size: 0.8125rem;
+      color: var(--p-accent);
+      text-align: right;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 58%;
+    }
+
+    .watch-compass-svg {
+      display: block;
+      width: 168px;
+      height: 168px;
+      max-width: 100%;
+    }
+
+    .hud-compass-legend {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 0.8125rem;
+      color: var(--p-ink);
+      border-top: 1px solid var(--p-hairline);
+      padding-top: 8px;
+    }
+
+    .compass-leg-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .swatch {
+      width: 10px;
+      height: 3px;
+      border-radius: 2px;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    .swatch-wind { background: var(--p-wind); }
+    .swatch-wave { background: var(--p-accent); }
+
+    .hud-big-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .hud-tile {
+      background: var(--p-bg);
+      border: 1px solid var(--p-hairline);
+      border-radius: var(--r-md);
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .hud-label {
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--p-muted);
+      line-height: 1.25;
+    }
+
+    .hud-val {
+      font-size: 1.375rem;
+      font-weight: 600;
+      color: var(--p-ink);
+      line-height: 1.2;
+    }
+
+    .hud-sub {
+      font-size: 0.8125rem;
+      color: var(--p-accent);
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .turnaround-box {
+      background: rgba(251, 191, 36, 0.08);
+      border: 1px solid rgba(251, 191, 36, 0.55);
+      border-radius: var(--r-md);
+      padding: 10px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .turnaround-meta {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .turnaround-label {
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--p-amber);
+    }
+
+    .turnaround-route {
+      font-size: 0.875rem;
+      color: var(--p-ink);
+      line-height: 1.3;
+    }
+
+    .turnaround-time {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: var(--p-amber);
+      flex-shrink: 0;
+    }
+
+    .btn-back {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      min-height: 44px;
+      padding: 8px 12px;
+      color: var(--p-accent);
+      background: transparent;
+      text-decoration: none;
+      font-size: 0.9375rem;
+      font-weight: 500;
+      border: 1px solid var(--p-hairline-accent);
+      border-radius: var(--r-sm);
+      transition: background-color 140ms ease, border-color 140ms ease, transform 140ms ease;
+    }
+
+    .btn-back:hover {
+      background: rgba(90, 185, 252, 0.1);
+      border-color: var(--p-accent);
+      transform: translateY(-1px);
+    }
+
+    .btn-back:active {
+      transform: translateY(0);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hud-input,
+      .btn-back {
+        transition: none !important;
+        transform: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="watch-shell" aria-label="Smartwatch HUD Nautico Golfo di Genova">
+    <header class="watch-top">
+      <div class="watch-brand-wrap">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <circle cx="8" cy="8" r="6.5" stroke="#5ab9fc" stroke-width="1.3" />
+          <path d="M8 2.5V4M8 12v1.5M2.5 8H4M12 8h1.5" stroke="#5ab9fc" stroke-width="1.2" stroke-linecap="round" />
+          <polygon points="8,4.2 9.6,8 8,11.8 6.4,8" fill="#5ab9fc" fill-opacity="0.28" stroke="#5ab9fc" stroke-width="1" />
+        </svg>
+        <h1 class="watch-title">MEDIOMETEO HUD</h1>
+      </div>
+      <time id="watch-clock" class="watch-clock mono-num">--:--:--</time>
+    </header>
+
+    <section class="hud-controls-grid" aria-label="Parametri rotta costiera">
+      <div class="hud-field">
+        <label for="watch-origin" class="hud-field-label">Partenza</label>
+        <select id="watch-origin" class="hud-input"></select>
+      </div>
+      <div class="hud-field">
+        <label for="watch-dest" class="hud-field-label">Destinazione</label>
+        <select id="watch-dest" class="hud-input"></select>
+      </div>
+      <div class="hud-field">
+        <label for="watch-speed" class="hud-field-label">Crociera (kt)</label>
+        <input id="watch-speed" class="hud-input mono-num" type="number" value="6.0" min="1" max="40" step="0.5" inputmode="decimal">
+      </div>
+      <div class="hud-field">
+        <label for="watch-duration" class="hud-field-label">Durata A+R (min, incl. 20m sosta)</label>
+        <input id="watch-duration" class="hud-input mono-num" type="number" value="90" min="20" max="600" step="10" inputmode="numeric">
+      </div>
+    </section>
+
+    <section class="hud-compass-card" aria-label="Bussola nautica da polso">
+      <div class="hud-compass-head">
+        <span class="hud-label">Bussola vento e onda</span>
+        <span id="hud-compass-target" class="hud-compass-target mono-num">San Fruttuoso</span>
+      </div>
+      <svg id="watch-svg-compass" class="watch-compass-svg" viewBox="0 0 180 180" width="168" height="168" role="img" aria-label="Bussola nautica vettoriale con direzione vento e swell">
+        <defs>
+          <marker id="watch-arrow-wind" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+            <path d="M0,0.5 L7,3.5 L0,6.5 Z" fill="#10b981" />
+          </marker>
+          <marker id="watch-arrow-wave" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+            <path d="M0,0.5 L7,3.5 L0,6.5 Z" fill="#5ab9fc" />
+          </marker>
+        </defs>
+        <circle cx="90" cy="90" r="62" fill="#0d121c" stroke="rgba(233,237,243,0.22)" stroke-width="1" />
+        <circle cx="90" cy="90" r="40" fill="none" stroke="rgba(233,237,243,0.12)" stroke-width="1" stroke-dasharray="2 3" />
+        <circle cx="90" cy="90" r="18" fill="none" stroke="rgba(233,237,243,0.1)" stroke-width="1" />
+        <path id="watch-bay-cone" d="" fill="rgba(251, 191, 36, 0.14)" stroke="rgba(251, 191, 36, 0.45)" stroke-width="1" />
+        <line x1="90" y1="28" x2="90" y2="152" stroke="rgba(233,237,243,0.14)" stroke-width="1" />
+        <line x1="28" y1="90" x2="152" y2="90" stroke="rgba(233,237,243,0.14)" stroke-width="1" />
+        <line x1="133.8" y1="46.2" x2="129.6" y2="50.4" stroke="rgba(233,237,243,0.3)" stroke-width="1" />
+        <line x1="133.8" y1="133.8" x2="129.6" y2="129.6" stroke="rgba(233,237,243,0.3)" stroke-width="1" />
+        <line x1="46.2" y1="133.8" x2="50.4" y2="129.6" stroke="rgba(233,237,243,0.3)" stroke-width="1" />
+        <line x1="46.2" y1="46.2" x2="50.4" y2="50.4" stroke="rgba(233,237,243,0.3)" stroke-width="1" />
+        <text x="90" y="14" text-anchor="middle" dominant-baseline="middle" fill="#5ab9fc" font-family="IBM Plex Mono, monospace" font-size="13" font-weight="600">N</text>
+        <text x="166" y="90" text-anchor="middle" dominant-baseline="middle" fill="#e9edf3" font-family="IBM Plex Mono, monospace" font-size="13" font-weight="600">E</text>
+        <text x="90" y="167" text-anchor="middle" dominant-baseline="middle" fill="#e9edf3" font-family="IBM Plex Mono, monospace" font-size="13" font-weight="600">S</text>
+        <text x="14" y="90" text-anchor="middle" dominant-baseline="middle" fill="#e9edf3" font-family="IBM Plex Mono, monospace" font-size="13" font-weight="600">W</text>
+        <line id="watch-wave-line" x1="90" y1="144" x2="90" y2="108" stroke="#5ab9fc" stroke-width="2.75" stroke-dasharray="4 3" marker-end="url(#watch-arrow-wave)" opacity="0" />
+        <line id="watch-wind-line" x1="90" y1="32" x2="90" y2="72" stroke="#10b981" stroke-width="3.2" marker-end="url(#watch-arrow-wind)" opacity="0" />
+        <circle cx="90" cy="90" r="4.5" fill="#131824" stroke="#e9edf3" stroke-width="1.5" />
+      </svg>
+      <div class="hud-compass-legend mono-num">
+        <span class="compass-leg-item">
+          <span class="swatch swatch-wind" aria-hidden="true"></span>
+          <span id="hud-compass-wind">Vento --°</span>
+        </span>
+        <span class="compass-leg-item">
+          <span class="swatch swatch-wave" aria-hidden="true"></span>
+          <span id="hud-compass-wave">Onda --°</span>
+        </span>
+      </div>
+    </section>
+
+    <section class="hud-big-grid" aria-label="Telemetria marina e rotta">
+      <div class="hud-tile">
+        <div class="hud-label">Vento reale</div>
+        <div class="hud-val mono-num" id="hud-wind">-- kt</div>
+        <div class="hud-sub mono-num" id="hud-wind-sub">Raffica -- kt</div>
+      </div>
+      <div class="hud-tile">
+        <div class="hud-label">Onda Hs / Hmax</div>
+        <div class="hud-val mono-num" id="hud-wave">-- m</div>
+        <div class="hud-sub mono-num" id="hud-wave-sub">Tp -- s</div>
+      </div>
+      <div class="hud-tile">
+        <div class="hud-label">Distanza A+R</div>
+        <div class="hud-val mono-num" id="hud-dist">-- NM</div>
+        <div class="hud-sub mono-num" id="hud-nav-time">Nav -- min</div>
+      </div>
+      <div class="hud-tile">
+        <div class="hud-label">Nodi richiesti</div>
+        <div class="hud-val mono-num" id="hud-req-kt" style="color:var(--p-wind);">-- kt</div>
+        <div class="hud-sub mono-num" id="hud-risacca">Risacca -- m</div>
+      </div>
+    </section>
+
+    <div class="turnaround-box">
+      <div class="turnaround-meta">
+        <div class="turnaround-label">Inversione rotta (Turnaround)</div>
+        <div id="hud-route-label" class="turnaround-route">Portofino ↔ San Fruttuoso</div>
+      </div>
+      <div id="hud-turnaround" class="turnaround-time mono-num">--:--</div>
+    </div>
+
+    <a href="/" class="btn-back">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M10.5 3.5L6 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
+      <span>Torna alla sala operativa</span>
+    </a>
+  </main>
+
+  <script src="/static/orologio.js?v=4.0"></script>
+</body>
+</html>

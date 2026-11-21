@@ -1,0 +1,17 @@
+{
+  "name": "MedioMeteo Genova — Terra & Mare",
+  "short_name": "MedioMeteo GE",
+  "description": "Nowcast (0-3h) e Forecast Multi-Modello (AROME 1.3km, ICON-D2 2km, ECMWF) per la Provincia di Genova e il Golfo Ligure.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07111e",
+  "theme_color": "#0b192c",
+  "lang": "it-IT",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%230a0d14' stroke='%235ab9fc' stroke-width='4'/><circle cx='50' cy='28' r='7' fill='none' stroke='%235ab9fc' stroke-width='5'/><path d='M50 35v38M35 47h30M28 60a22 22 0 0 0 44 0' fill='none' stroke='%23e9edf3' stroke-width='5' stroke-linecap='round'/></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}

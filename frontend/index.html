@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f8fafc">
+  <title>MedioMeteo Genova — Mappa Live Terra e Mare</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/vendor/leaflet.css?v=4.0" />
+  <link rel="stylesheet" href="/static/styles.css?v=4.0" />
+</head>
+<body>
+  <main class="viewport-stage">
+    <!-- 1. Mappa Full-Screen 100dvh x 100vw -->
+    <div id="genova-map" class="map-canvas" role="application" aria-label="Mappa interattiva Genova e Mar Ligure"></div>
+
+    <!-- 2. Top-Left: Unica pillola ricerca flottante + preferiti 1-tap -->
+    <div class="search-dock">
+      <div class="search-pill glass-panel">
+        <span class="search-icon" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>
+        </span>
+        <input
+          id="loc-search-input"
+          type="search"
+          class="search-input"
+          placeholder="Cerca località in Liguria..."
+          aria-label="Cerca località Provincia di Genova"
+          autocomplete="off"
+        />
+        <button id="btn-toggle-fav" type="button" class="pill-icon-btn" aria-pressed="false" title="Salva nei preferiti" aria-label="Salva località nei preferiti">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true">
+            <polygon points="8,1.8 9.9,5.7 14.2,6.3 11.1,9.3 11.8,13.6 8,11.6 4.2,13.6 4.9,9.3 1.8,6.3 6.1,5.7"/>
+          </svg>
+        </button>
+        <button id="btn-gps" type="button" class="pill-icon-btn" title="Usa posizione GPS" aria-label="Centra sulla tua posizione GPS">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+            <circle cx="8" cy="8" r="3.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2"/>
+          </svg>
+        </button>
+      </div>
+
+      <div id="loc-picker-panel" class="loc-dropdown glass-panel" role="dialog" aria-label="Suggerimenti e preferiti" hidden>
+        <div id="fav-chips-bar" class="fav-chips-bar" aria-label="Preferiti rapidi"></div>
+        <div class="loc-type-chips" role="group" aria-label="Filtra categoria">
+          <button type="button" class="loc-chip active" data-loc-type="" aria-pressed="true">Tutte</button>
+          <button type="button" class="loc-chip" data-loc-type="comune" aria-pressed="false">Comuni</button>
+          <button type="button" class="loc-chip" data-loc-type="quartiere" aria-pressed="false">Quartieri</button>
+          <button type="button" class="loc-chip" data-loc-type="rada_porto" aria-pressed="false">Rade</button>
+          <button type="button" class="loc-chip" data-loc-type="valico" aria-pressed="false">Valichi</button>
+        </div>
+        <div id="loc-picker-list" class="loc-dropdown-list" role="listbox" aria-label="Elenco località"></div>
+      </div>
+
+      <!-- 3. Watch Banner condizionale & Radar Scrubber impilati senza sovrapposizioni -->
+      <div id="liguria-watch-banner" class="watch-banner glass-panel" hidden role="status"></div>
+      <div id="radar-bar" class="radar-bar glass-panel" hidden>
+        <button id="btn-radar-play" type="button" class="btn-mini">Play</button>
+        <input id="radar-frame-slider" type="range" min="0" max="0" value="0" class="radar-slider" aria-label="Timeline radar" />
+        <span id="radar-time-label" class="radar-time">Live</span>
+      </div>
+    </div>
+
+    <!-- 4. Right Rail stile Windy: 1 solo layer attivo alla volta + Rotta + Tema + Orologio -->
+    <aside id="layer-rail" class="layer-rail glass-panel" aria-label="Livelli mappa e strumenti">
+      <div class="rail-group" role="radiogroup" aria-label="Livello mappa attivo">
+        <button type="button" class="rail-btn active" data-layer="wind" aria-pressed="true" title="Vento">
+          <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 6h8.5a2 2 0 1 0-2-2"/><path d="M2 10h10.5a2 2 0 1 1-2 2"/><path d="M2 8h6"/></svg>
+          <span>Vento</span>
+        </button>
+        <button type="button" class="rail-btn" data-layer="radar" aria-pressed="false" title="Pioggia Radar">
+          <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 9.5h8a2.5 2.5 0 0 0 .3-5A3.5 3.5 0 0 0 5.6 3.8 2.8 2.8 0 0 0 4 9.5z"/><path d="M5.5 11.8l-.8 2M8.5 11.8l-.8 2M11.5 11.8l-.8 2"/></svg>
+          <span>Radar</span>
+        </button>
+        <button type="button" class="rail-btn" data-layer="waves" aria-pressed="false" title="Onde e Mare">
+          <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1.5 6.5c1.5-1.5 3-1.5 4.5 0s3 1.5 4.5 0 3-1.5 4.5 0"/><path d="M1.5 10.5c1.5-1.5 3-1.5 4.5 0s3 1.5 4.5 0 3-1.5 4.5 0"/></svg>
+          <span>Onde</span>
+        </button>
+        <button type="button" class="rail-btn" data-layer="stations" aria-pressed="false" title="Stazioni OMIRL e Idrometri">
+          <svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 13V6"/><circle cx="8" cy="5" r="1.5"/><path d="M4.8 7.8a4.5 4.5 0 0 1 0-5.6M11.2 2.2a4.5 4.5 0 0 1 0 5.6"/></svg>
+          <span>Stazioni</span>
+        </button>
+      </div>
+
+      <div class="rail-divider" aria-hidden="true"></div>
+
+      <button id="btn-rail-more" type="button" class="rail-btn" aria-expanded="false" aria-controls="rail-more-menu" title="Altri strumenti">
+        <svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="3.5" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="12.5" cy="8" r="1.3"/></svg>
+        <span>Altro</span>
+      </button>
+    </aside>
+
+    <div id="rail-more-menu" class="rail-more-menu glass-panel" hidden>
+      <button id="btn-open-route" type="button" class="rail-more-item" aria-expanded="false">
+        <span>Pianifica Rotta Costiera</span>
+      </button>
+      <button id="btn-toggle-theme" type="button" class="rail-more-item">
+        <span>Tema: <strong id="theme-label">Scuro</strong></span>
+      </button>
+      <a href="/orologio" class="rail-more-item">
+        <span>Vista Smartwatch (/orologio)</span>
+      </a>
+    </div>
+
+    <!-- 6. Pannello flottante Rotta Costiera (traccia direttamente sulla mappa) -->
+    <section id="route-panel" class="route-panel glass-panel" hidden aria-label="Calcolatore rotta costiera">
+      <div class="route-panel-head">
+        <strong>Rotta Costiera &amp; AMP Portofino</strong>
+        <button id="btn-close-route" type="button" class="pill-icon-btn" aria-label="Chiudi rotta">✕</button>
+      </div>
+      <div class="route-panel-grid">
+        <label class="field-compact">
+          <span>Partenza</span>
+          <select id="route-origin" class="compact-input"></select>
+        </label>
+        <label class="field-compact">
+          <span>Destinazione</span>
+          <select id="route-dest" class="compact-input"></select>
+        </label>
+        <label class="field-compact">
+          <span>Crociera (kt)</span>
+          <input id="route-speed" type="number" min="1" max="40" step="0.5" value="6.0" class="compact-input" />
+        </label>
+        <label class="field-compact">
+          <span>Durata A+R (min)</span>
+          <input id="route-duration" type="number" min="20" max="600" step="10" value="90" class="compact-input" />
+        </label>
+        <label class="field-compact">
+          <span>Sosta (min)</span>
+          <input id="route-stop" type="number" min="0" max="240" step="5" value="20" class="compact-input" />
+        </label>
+        <div class="field-compact field-btn-wrap">
+          <button id="btn-calc-route" type="button" class="btn-primary-pill">Traccia su mappa</button>
+        </div>
+      </div>
+      <div id="route-results-grid" class="route-kpi-strip"></div>
+      <div id="route-legs-list" class="route-legs-list"></div>
+    </section>
+
+    <!-- 7. Bottom Sheet Progressivo a 3 Livelli (peek | medium | expanded) -->
+    <section id="bottom-sheet" class="bottom-sheet glass-panel" data-state="medium" aria-live="polite" aria-label="Scheda meteo locale">
+      <div id="sheet-handle-row" class="sheet-header">
+        <div class="sheet-drag-bar" aria-hidden="true"></div>
+        <div class="sheet-header-main">
+          <div class="sheet-title-group">
+            <h1 id="sheet-peek-title" class="sheet-title">Genova</h1>
+            <span id="sheet-peek-summary" class="sheet-peek-summary">--°C · --</span>
+          </div>
+          <div class="sheet-header-actions">
+            <button id="btn-sheet-expand" type="button" class="btn-expand" aria-label="Espandi o comprimi pannello">Dettagli</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="sheet-scroll">
+        <!-- LIVELLO MEDIO: Massimo 3 metriche primarie + Timeline oraria -->
+        <div class="sheet-medium">
+          <div id="sheet-metrics-grid" class="metrics-row"></div>
+
+          <div class="hourly-wrap">
+            <div id="hourly-strip" class="hourly-strip" role="list" aria-label="Previsione oraria prossime 24 ore"></div>
+          </div>
+        </div>
+
+        <!-- LIVELLO ESPANSO: AI Ask, Metriche secondarie, ARPAL (chiuso), Idrometri & Modalità Avanzata -->
+        <div class="sheet-expanded">
+          <form id="ask-form" class="ask-bar">
+            <input
+              id="ask-input"
+              type="text"
+              class="ask-input"
+              maxlength="240"
+              placeholder="Chiedi su questo punto (es. piove stasera? com'è il mare?)..."
+              aria-label="Fai una domanda meteo su questo punto"
+            />
+            <button id="ask-submit" type="submit" class="btn-primary-pill">Chiedi</button>
+          </form>
+          <div id="ask-answer" class="ask-answer" hidden></div>
+
+          <div id="extra-metrics-row" class="extra-metrics-row"></div>
+
+          <div id="exp-grid-2" class="exp-grid-2">
+            <details class="advanced-details">
+              <summary class="advanced-summary">Bollettino Ufficiale ARPAL Liguria</summary>
+              <div class="advanced-body">
+                <div id="arpal-bulletin-box" class="arpal-list"></div>
+              </div>
+            </details>
+            <div id="hydrometers-section" class="exp-section">
+              <h2>Idrometri torrenti</h2>
+              <div id="omirl-hydrometers-grid" class="obs-list"></div>
+            </div>
+          </div>
+
+          <details id="advanced-meteo-details" class="advanced-details">
+            <summary class="advanced-summary">Modalità avanzata: 5 Modelli, Analisi Sinottica &amp; Sensori OMIRL</summary>
+            <div class="advanced-body">
+              <div class="exp-section">
+                <h2>Analisi sinottica completa</h2>
+                <p id="ai-full-analysis" class="ai-full-analysis"></p>
+              </div>
+              <div class="exp-section">
+                <div class="exp-head">
+                  <h2>Confronto 5 Modelli (AROME · ICON-D2 · ECMWF · GFS · MET.no)</h2>
+                  <div id="models-divergence-summary" class="divergence-pill">--</div>
+                </div>
+                <div class="charts-grid">
+                  <div class="chart-card"><canvas id="chart-multimodel"></canvas></div>
+                  <div class="chart-card"><canvas id="chart-wind-wave"></canvas></div>
+                </div>
+                <div class="table-wrap">
+                  <table class="models-table">
+                    <thead>
+                      <tr>
+                        <th>Ora</th>
+                        <th>Consenso</th>
+                        <th>AROME</th>
+                        <th>ICON-D2</th>
+                        <th>ECMWF</th>
+                        <th>GFS</th>
+                        <th>MET.no</th>
+                        <th>Δ</th>
+                        <th>Pioggia</th>
+                        <th>Onda</th>
+                      </tr>
+                    </thead>
+                    <tbody id="models-5-hourly-tbody"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="exp-section">
+                <h2>Stazioni OMIRL vicine</h2>
+                <div id="omirl-stations-grid" class="obs-list"></div>
+              </div>
+            </div>
+          </details>
+
+          <footer class="sheet-disclaimers">
+            <div id="disclaimer-land-text"></div>
+            <div id="disclaimer-sea-text"></div>
+          </footer>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/vendor/leaflet.js?v=4.0"></script>
+  <script src="/static/vendor/chart.umd.min.js?v=4.0"></script>
+  <script type="module" src="/static/app.js?v=4.0"></script>
+</body>
+</html>
