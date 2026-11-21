@@ -73,7 +73,12 @@ def test_frontend_xss_and_no_inline_onclick() -> None:
     index_html = (root / "index.html").read_text(encoding="utf-8")
     app_js = (root / "app.js").read_text(encoding="utf-8")
 
+    orologio_html = (root / "orologio.html").read_text(encoding="utf-8")
+
     assert "onclick=" not in index_html
+    assert "onclick=" not in orologio_html
+    assert "<script>" not in index_html
+    assert "<script>" not in orologio_html
     assert "onclick=" not in app_js
     assert "function escapeHtml(" in app_js
     assert "function sanitizeHttpUrl(" in app_js
