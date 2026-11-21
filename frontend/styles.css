@@ -1323,6 +1323,37 @@ select:focus-visible {
   font-weight: 500;
 }
 
+/* Conditional Early-Warning Banner (hidden in normal weather) */
+.watch-banner {
+  background: rgba(245, 158, 11, 0.12);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.45);
+  color: #fde68a;
+  padding: 0.48rem 1.25rem;
+  font-size: 0.84rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.watch-banner[hidden] { display: none; }
+.watch-banner.watch-red {
+  background: rgba(239, 68, 68, 0.14);
+  border-bottom-color: rgba(239, 68, 68, 0.55);
+  color: #fecaca;
+}
+
+.divergence-summary {
+  font-size: 0.84rem;
+  color: var(--p-muted);
+  background: var(--p-surface);
+  border: 1px solid var(--p-hairline);
+  border-radius: var(--r-sm);
+  padding: 0.42rem 0.75rem;
+}
+.divergence-summary strong { color: var(--p-ink); }
+
 /* Route Split Layout (TASK-UX-09) */
 .route-split-grid {
   display: grid;

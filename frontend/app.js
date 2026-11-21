@@ -1329,6 +1329,8 @@ function renderDashboard() {
     { hour: "2-digit", minute: "2-digit" }
   );
 
+  renderWatchBanner(pkg);
+
   // 2. Tab 1: Diagnostica compatta + Quadrante SVG + Stazioni OMIRL + Idrometri + Webcam
   const descEl = document.getElementById("main-weather-desc");
   if (descEl) {
@@ -1685,7 +1687,7 @@ function renderOmirlObservationsAndWebcams(obs, cur, seaCond) {
       const hasWind = st.has_live_wind !== false && st.sensor !== "Termo/Pluvio";
       const defaultSensor = hasWind ? "Vento" : st.has_live_temp !== false ? "Termo" : "Pluvio";
       const windPart = hasWind
-        ? `<span>${SVG_ICONS.wind} <strong>${st.wind_knots} kt</strong> (${st.wind_kmh} km/h da ${st.wind_dir_deg ?? 0}°) • Max <strong>${st.gust_knots} kt</strong></span>`
+        ? `<span>${SVG_ICONS.wind} <strong>${st.wind_knots} kt</strong> (${st.wind_kmh} km/h da ${st.wind_dir_deg ?? 0}°) • Max <strong>${st.gust_estimated ? "~" : ""}${st.gust_knots} kt</strong></span>`
         : `<span style="color:var(--p-muted);">${SVG_ICONS.wind} Rif. zona ${st.wind_knots} kt</span>`;
 
       return `
@@ -1974,7 +1976,7 @@ function renderLandAndSeaPanels(landRisk, seaCond, conv) {
 
     <div class="risk-item border-physics">
       <div class="risk-item-title">
-        <span class="risk-item-title-label">${SVG_ICONS.clock} Curva di marea, corrente superficiale &amp; visibilità ottica</span>
+        <span class="risk-item-title-label">${SVG_ICONS.clock} Curva di marea${td.is_synthetic ? " (stimata)" : ""}, corrente superficiale &amp; visibilità ottica</span>
         <span>${td.current_height_cm} cm (${td.current_phase})</span>
       </div>
       <div class="risk-item-desc">
@@ -1986,7 +1988,81 @@ function renderLandAndSeaPanels(landRisk, seaCond, conv) {
   `;
 }
 
+function renderWatchBanner(pkg) {
+  const banner = document.getElementById("liguria-watch-banner");
+  if (!banner || !pkg) return;
+
+  const conv = pkg.nowcast?.ligurian_convergence || {};
+  const windKt = pkg.sea?.marine_conditions?.wind?.speed_knots ?? 0;
+  const hydros =
+    pkg.observations_live?.all_river_hydrometers ||
+    pkg.observations_live?.nearest_river_hydrometers ||
+    [];
+  const alertHydros = hydros.filter(
+    (h) => h.status_level === "red" || h.status_level === "orange"
+  );
+
+  const reasons = [];
+  let isRed = false;
+  if (alertHydros.length) {
+    if (alertHydros.some((h) => h.status_level === "red")) isRed = true;
+    reasons.push(
+      `Idrometri in guardia: ${alertHydros
+        .slice(0, 3)
+        .map((h) => `${h.name} (${h.level_m}m)`)
+        .join(", ")}`
+    );
+  }
+  if ((conv.convergence_score || 0) >= 50) {
+    if ((conv.convergence_score || 0) >= 75) isRed = true;
+    reasons.push(`Convergenza ligure ${conv.convergence_score}/100 (${conv.status || "attiva"})`);
+  }
+  if (windKt >= 34) {
+    isRed = true;
+    reasons.push(`Burrasca in mare (${windKt} kt)`);
+  }
+
+  if (!reasons.length) {
+    banner.hidden = true;
+    banner.className = "watch-banner";
+    banner.textContent = "";
+    return;
+  }
+
+  banner.className = isRed ? "watch-banner watch-red" : "watch-banner";
+  banner.innerHTML = `<span><strong>Segnale operativo Liguria:</strong> ${escapeHtml(reasons.join(" • "))}</span>`;
+  banner.hidden = false;
+}
+
 function render5ModelsHourlyTable(hourly48) {
+  const summaryEl = document.getElementById("models-divergence-summary");
+  if (summaryEl && hourly48 && hourly48.length) {
+    const slice24 = hourly48.slice(0, 24);
+    let maxSpread = slice24[0];
+    let maxLamRain = slice24[0];
+    slice24.forEach((h) => {
+      if ((h.model_spread?.wind_spread_knots ?? 0) > (maxSpread.model_spread?.wind_spread_knots ?? 0)) {
+        maxSpread = h;
+      }
+      if ((h.precip_max_lam_mm ?? 0) > (maxLamRain.precip_max_lam_mm ?? 0)) {
+        maxLamRain = h;
+      }
+    });
+    const maxSpreadKt = maxSpread.model_spread?.wind_spread_knots ?? 0;
+    const spreadTime = (maxSpread.time.split("T")[1] || maxSpread.time).slice(0, 5);
+    const lamPeak = maxLamRain.precip_max_lam_mm ?? 0;
+    const lamTime = (maxLamRain.time.split("T")[1] || maxLamRain.time).slice(0, 5);
+    const agreementTxt =
+      maxSpreadKt < 5
+        ? `<strong>Accordo alto</strong> tra i 5 modelli nelle prossime 24h (Δ vento max ${escapeHtml(maxSpreadKt)} kt)`
+        : `<strong>Divergenza vento max Δ ${escapeHtml(maxSpreadKt)} kt</strong> alle ${escapeHtml(spreadTime)}`;
+    const rainTxt =
+      lamPeak >= 1.0
+        ? ` • Picco LAM pioggia: <strong>${escapeHtml(lamPeak)} mm/h</strong> alle ${escapeHtml(lamTime)}`
+        : " • Precipitazioni assenti/deboli";
+    summaryEl.innerHTML = `${agreementTxt}${rainTxt}`;
+  }
+
   const tbody = document.getElementById("models-5-hourly-tbody");
   if (!tbody || !hourly48 || !hourly48.length) return;
 
