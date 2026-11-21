@@ -318,6 +318,9 @@ async def test_fetch_omirl_live_observations_multi_sensor_fusion_and_buoy() -> N
     assert by_code["BORGZ"]["sensor"] == "Termo/Pluvio"
     assert by_code["BORGZ"]["has_live_wind"] is False
     assert by_code["BORGZ"]["wind_kmh"] == 11.0
+    assert by_code["GEPOA"]["display_tier"] == 1
+    assert by_code["BORGZ"]["display_tier"] == 3
+    assert by_code["BORGZ"]["severity"] == "normal"
 
     # Stazione solo Pluvio
     assert by_code["PLVONLY"]["sensor"] == "Termo/Pluvio"

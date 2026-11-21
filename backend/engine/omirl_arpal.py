@@ -26,6 +26,36 @@ METNO_COMPACT_URL = "https://api.met.no/weatherapi/locationforecast/2.0/compact"
 _OMIRL_BULK_CACHE: dict[str, Any] = {"ts": 0.0, "payload": None}
 _OMIRL_BULK_LOCK = asyncio.Lock()
 
+# Stazioni cardine Tier 1 per chiarezza cartografica iniziale (ADR-0010)
+_TIER1_STATION_CODES = {
+    "GEPOA", "GEPEG", "RIGHI", "MTPOR", "ARENZ", "CHIAV", "RAPAL",
+    "SESTL", "MOGLI", "BORGN", "BUSAL", "FIRPO", "GEFER", "GERIV", "CARPB", "BOACM",
+}
+
+
+def _compute_tier_and_severity(
+    code: str,
+    wind_kmh: float = 0.0,
+    precip_1h_mm: float = 0.0,
+    status_level: str = "green",
+    has_live_wind: bool = False,
+) -> tuple[int, str]:
+    """Calcola `display_tier` (1/2/3) e `severity` (`normal|watch|alert`) con promozione automatica (ADR-0010)."""
+    if status_level == "red" or wind_kmh >= 60.0 or precip_1h_mm >= 15.0:
+        severity = "alert"
+    elif status_level == "orange" or wind_kmh >= 38.0 or precip_1h_mm >= 5.0:
+        severity = "watch"
+    else:
+        severity = "normal"
+
+    if code in _TIER1_STATION_CODES or severity in ("watch", "alert"):
+        tier = 1
+    elif has_live_wind or code in GENOVA_HYDROMETERS_META:
+        tier = 2
+    else:
+        tier = 3
+    return tier, severity
+
 # Mappa bacini e soglie idrometriche ufficiali di riferimento per i 24 idrometri della Provincia di Genova
 GENOVA_HYDROMETERS_META: dict[str, dict[str, Any]] = {
     "FIRPO": {"river": "Torrente Bisagno (Passerella Firpo / Brignole)", "warn_m": 2.50, "alarm_m": 3.50},
@@ -523,6 +553,12 @@ async def fetch_omirl_live_observations(
             lat, lon, termo_by_code, code, round(base_temp - max(0, elev_m - 20) * 0.0062, 1)
         )
         rain_val = _nearest_sensor_value(lat, lon, pluvio_by_code, code, round(base_rain_1h, 1))
+        tier, severity = _compute_tier_and_severity(
+            code=code,
+            wind_kmh=wind_kmh,
+            precip_1h_mm=rain_val,
+            has_live_wind=has_live_wind,
+        )
         return {
             "code": code,
             "name": item.get("name") or code,
@@ -544,6 +580,8 @@ async def fetch_omirl_live_observations(
             "has_live_wind": has_live_wind,
             "has_live_temp": code in termo_by_code,
             "has_live_rain": code in pluvio_by_code,
+            "display_tier": tier,
+            "severity": severity,
             "is_live_rest": True,
         }
 
@@ -653,6 +691,7 @@ async def fetch_omirl_live_observations(
         ref_str = str(h_item.get("refDate") or "")
         obs_time = ref_str[11:16] if len(ref_str) >= 16 else now_label
         dist = haversine_km(target_lat, target_lon, lat, lon)
+        tier, severity = _compute_tier_and_severity(code=code, status_level=h_level)
 
         hydrometers.append(
             {
@@ -672,6 +711,8 @@ async def fetch_omirl_live_observations(
                 "fill_pct": int(max(6, min(100, round((max(0.1, lvl_m + 0.5) / (alarm_m + 0.5)) * 100)))),
                 "status_label": h_status,
                 "status_level": h_level,
+                "display_tier": tier,
+                "severity": severity,
                 "is_live_rest": True,
             }
         )
