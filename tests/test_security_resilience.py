@@ -109,9 +109,11 @@ def test_omirl_chart_validation_and_security_headers(monkeypatch: pytest.MonkeyP
     assert health.headers.get("x-frame-options") == "DENY"
     assert "script-src 'self'" in (health.headers.get("content-security-policy") or "")
 
-    # 4. SRI sui tag CDN di index.html
+    # 4. Vendor locali self-hosted in index.html (zero dipendenza da CDN esterni per JS/CSS critici)
     index_html = (Path(__file__).resolve().parent.parent / "frontend" / "index.html").read_text(encoding="utf-8")
-    assert index_html.count('integrity="sha384-') == 3
+    assert "/static/vendor/leaflet.css" in index_html
+    assert "/static/vendor/leaflet.js" in index_html
+    assert "/static/vendor/chart.umd.min.js" in index_html
 
 
 def test_rate_limiter_and_circuit_breaker() -> None:
