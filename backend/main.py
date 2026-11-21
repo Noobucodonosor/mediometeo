@@ -91,7 +91,8 @@ async def add_security_headers(request, call_next):
         "script-src 'self' https://unpkg.com https://cdn.jsdelivr.net; "
         "style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
-        "img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com "
+        "img-src 'self' data: https://tile.openstreetmap.org https://*.tile.openstreetmap.org "
+        "https://tiles.openseamap.org https://*.basemaps.cartocdn.com "
         "https://tilecache.rainviewer.com https://omirl.regione.liguria.it https://unpkg.com; "
         "connect-src 'self'; "
         "frame-ancestors 'none'",
