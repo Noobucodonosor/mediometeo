@@ -63,3 +63,17 @@ async def test_circuit_breaker_synthetic_fallback(monkeypatch: pytest.MonkeyPatc
     assert data["is_stale"] is True
     assert "safety_disclaimer" in data["land"]
     assert "1530" in data["sea"]["safety_disclaimer"]
+
+
+def test_frontend_xss_and_no_inline_onclick() -> None:
+    """Verifica assenza di handler inline onclick= e presenza di escapeHtml/sanitizeHttpUrl (TASK-SEC-02 / #26)."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent / "frontend"
+    index_html = (root / "index.html").read_text(encoding="utf-8")
+    app_js = (root / "app.js").read_text(encoding="utf-8")
+
+    assert "onclick=" not in index_html
+    assert "onclick=" not in app_js
+    assert "function escapeHtml(" in app_js
+    assert "function sanitizeHttpUrl(" in app_js

@@ -71,6 +71,25 @@ const SVG_ICONS = {
   road: `<svg class="ui-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 2L2.5 14M11 2l2.5 12M8 3.5v2M8 8v2M8 12.2v1.5"/></svg>`,
 };
 
+function escapeHtml(val) {
+  if (val === null || val === undefined) return "";
+  return String(val)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function sanitizeHttpUrl(url) {
+  if (!url || typeof url !== "string") return "";
+  const trimmed = url.trim();
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed.replace(/["'<>\\]/g, "");
+  }
+  return "";
+}
+
 function setBadgeLevel(el, level, text) {
   if (!el) return;
   el.className = `badge-pill level-${level || "green"}`;
@@ -220,6 +239,22 @@ function bindUIEvents() {
   // Mode Switch Terra / Mare
   document.getElementById("btn-mode-land").addEventListener("click", () => switchMode("land"));
   document.getElementById("btn-mode-sea").addEventListener("click", () => switchMode("sea"));
+
+  const btnAdessoToMap = document.getElementById("btn-adesso-to-map");
+  if (btnAdessoToMap) {
+    btnAdessoToMap.addEventListener("click", () => window.switchTab("tab-mappa"));
+  }
+
+  const omirlStationsGrid = document.getElementById("omirl-stations-grid");
+  if (omirlStationsGrid) {
+    omirlStationsGrid.addEventListener("click", (ev) => {
+      const btn = ev.target.closest(".btn-omirl-chart");
+      if (!btn) return;
+      const code = btn.getAttribute("data-station-code");
+      const sensor = btn.getAttribute("data-sensor") || "Vento";
+      if (code) window.inspectOmirlStationChart(code, sensor, btn);
+    });
+  }
 
   // Filtri e ricerca unificata 118 località (Popover combobox + select nascosti sincronizzati)
   const pickerBtn = document.getElementById("loc-picker-btn");
@@ -1175,7 +1210,7 @@ function renderDashboard() {
   document.getElementById("pressure-trend").textContent = cur.pressure_trend_label;
   document.getElementById(
     "wind-local-note"
-  ).innerHTML = `<span><strong>Rosa dei venti ligure (${wind.ligurian_name} — ${wind.cardinal}):</strong> ${wind.local_note}</span>`;
+  ).innerHTML = `<span><strong>Rosa dei venti ligure (${escapeHtml(wind.ligurian_name)} — ${escapeHtml(wind.cardinal)}):</strong> ${escapeHtml(wind.local_note)}</span>`;
 
   document.getElementById(
     "map-coords-label"
@@ -1416,9 +1451,9 @@ function renderDynamicKPIs(cur, landRisk, seaCond) {
     .map(
       (c) => `
       <div class="kpi-box">
-        <div class="kpi-label">${c.label}</div>
-        <div class="kpi-value">${c.value}</div>
-        <div class="kpi-sub">${c.sub}</div>
+        <div class="kpi-label">${escapeHtml(c.label)}</div>
+        <div class="kpi-value">${escapeHtml(c.value)}</div>
+        <div class="kpi-sub">${escapeHtml(c.sub)}</div>
       </div>
     `
     )
@@ -1528,22 +1563,22 @@ function renderOmirlObservationsAndWebcams(obs, cur, seaCond) {
       return `
         <div class="station-card">
           <div class="station-header">
-            <div class="station-name">${st.name} <span class="station-code">(${st.code})</span></div>
+            <div class="station-name">${escapeHtml(st.name)} <span class="station-code">(${escapeHtml(st.code)})</span></div>
             <div style="display:flex;gap:0.35rem;align-items:center;flex-wrap:wrap;">
               ${liveBadge}
-              <span class="station-dist">${st.distance_km} km</span>
+              <span class="station-dist">${escapeHtml(st.distance_km)} km</span>
             </div>
           </div>
-          <div class="station-meta-line">${st.muni} • Quota ${st.elev_m} m • Rilevato ore ${st.observed_at}</div>
+          <div class="station-meta-line">${escapeHtml(st.muni)} • Quota ${escapeHtml(st.elev_m)} m • Rilevato ore ${escapeHtml(st.observed_at)}</div>
           <div class="station-metrics-row">
-            <span>${SVG_ICONS.thermometer} <strong>${st.temp_c}°C</strong></span>
-            <span>${SVG_ICONS.rain} <strong>${st.precip_1h_mm} mm</strong></span>
+            <span>${SVG_ICONS.thermometer} <strong>${escapeHtml(st.temp_c)}°C</strong></span>
+            <span>${SVG_ICONS.rain} <strong>${escapeHtml(st.precip_1h_mm)} mm</strong></span>
             ${windPart}
           </div>
           <div>
-            <button type="button" class="btn-action" style="margin-top:0.2rem;"
-              onclick="window.inspectOmirlStationChart('${st.code}', '${defaultSensor}', this)">
-              ${SVG_ICONS.chart} Curva 24h OMIRL (${defaultSensor})
+            <button type="button" class="btn-action btn-omirl-chart" style="margin-top:0.2rem;"
+              data-station-code="${escapeHtml(st.code)}" data-sensor="${escapeHtml(defaultSensor)}">
+              ${SVG_ICONS.chart} Curva 24h OMIRL (${escapeHtml(defaultSensor)})
             </button>
           </div>
         </div>
@@ -1571,10 +1606,10 @@ function renderOmirlObservationsAndWebcams(obs, cur, seaCond) {
       return `
         <div class="station-card">
           <div class="station-header">
-            <div class="station-name">${hy.name} <span class="station-code">(${hy.code})</span></div>
-            <span class="station-dist">${hy.distance_km} km</span>
+            <div class="station-name">${escapeHtml(hy.name)} <span class="station-code">(${escapeHtml(hy.code)})</span></div>
+            <span class="station-dist">${escapeHtml(hy.distance_km)} km</span>
           </div>
-          <div class="station-meta-line">Bacino: <strong>${hy.river}</strong> (${hy.municipality || hy.muni || "GE"}) • Ore ${hy.observed_at}</div>
+          <div class="station-meta-line">Bacino: <strong>${escapeHtml(hy.river)}</strong> (${escapeHtml(hy.municipality || hy.muni || "GE")}) • Ore ${escapeHtml(hy.observed_at)}</div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.15rem;">
             <span class="hydro-level-val">Livello: ${hy.level_m} m</span>
             <span class="badge-pill ${pillClass}">${hy.status_level === "green" ? "Regolare" : "Guardia idro"}</span>
@@ -1604,10 +1639,11 @@ function renderOmirlObservationsAndWebcams(obs, cur, seaCond) {
 
   camGrid.innerHTML = cams
     .map((cam) => {
-      const previewStyle = cam.live_image_url
-        ? `background: linear-gradient(180deg, rgba(10,13,20,0.18) 0%, rgba(10,13,20,0.88) 100%), url('${cam.live_image_url}') center/cover no-repeat;`
+      const safeCamUrl = sanitizeHttpUrl(cam.live_image_url);
+      const previewStyle = safeCamUrl
+        ? `background: linear-gradient(180deg, rgba(10,13,20,0.18) 0%, rgba(10,13,20,0.88) 100%), url('${safeCamUrl}') center/cover no-repeat;`
         : `background: linear-gradient(180deg, #0d1b2e 0%, #0a1424 58%, #0a0d14 100%);`;
-      const svgBackdrop = cam.live_image_url
+      const svgBackdrop = safeCamUrl
         ? ""
         : `<svg viewBox="0 0 320 175" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;opacity:0.45;pointer-events:none;">
             <path d="M0,${115 - waveAmp} Q80,${115 + waveAmp} 160,${115 - waveAmp} T320,${115 - waveAmp} L320,175 L0,175 Z" fill="#0284c7" />
@@ -1619,16 +1655,16 @@ function renderOmirlObservationsAndWebcams(obs, cur, seaCond) {
           <div class="webcam-preview" style="${previewStyle}">
             ${svgBackdrop}
             <div style="display:flex;justify-content:space-between;align-items:center;z-index:2;gap:0.4rem;">
-              <span class="badge-pill ${cam.live_image_url ? "level-green" : "level-physics"}">
-                ${SVG_ICONS.camera} ${cam.live_image_url ? "Immagine live OMIRL" : "Telemetria & stream"}
+              <span class="badge-pill ${safeCamUrl ? "level-green" : "level-physics"}">
+                ${SVG_ICONS.camera} ${safeCamUrl ? "Immagine live OMIRL" : "Telemetria & stream"}
               </span>
               <span class="webcam-dist-tag">
-                a ${cam.distance_km} km
+                a ${escapeHtml(cam.distance_km)} km
               </span>
             </div>
             <div style="z-index:2;">
-              <div style="font-size:0.95rem;font-weight:600;color:#e9edf3;text-shadow:0 1px 4px rgba(0,0,0,0.9);">${cam.name}</div>
-              <div style="font-size:0.8125rem;color:#e9edf3;margin-top:0.15rem;">Direzione: ${cam.view_direction}</div>
+              <div style="font-size:0.95rem;font-weight:600;color:#e9edf3;text-shadow:0 1px 4px rgba(0,0,0,0.9);">${escapeHtml(cam.name)}</div>
+              <div style="font-size:0.8125rem;color:#e9edf3;margin-top:0.15rem;">Direzione: ${escapeHtml(cam.view_direction)}</div>
               <div style="font-size:0.8125rem;color:#5ab9fc;margin-top:0.15rem;font-variant-numeric:tabular-nums;">
                 Condizioni: ${cur?.temp_c?.toFixed(1) ?? "--"}°C • Vento ${windKt} kt • Onda Hs ${hs}m
               </div>
@@ -1909,13 +1945,13 @@ async function calculateCoastalRoute() {
         (leg, i) => `
         <div class="risk-item border-physics">
           <div class="risk-item-title">
-            <span>Tratta ${i + 1}: ${leg.from_name} → ${leg.to_name}</span>
-            <span>${leg.distance_nm} NM</span>
+            <span>Tratta ${i + 1}: ${escapeHtml(leg.from_name)} → ${escapeHtml(leg.to_name)}</span>
+            <span>${escapeHtml(leg.distance_nm)} NM</span>
           </div>
           <div class="risk-item-desc">
             ${
               leg.amp_speed_limit_knots
-                ? `<span style="display:inline-flex;align-items:center;gap:4px;color:#fbbf24;">${SVG_ICONS.alert} <strong>Vincolo Area Marina Protetta (AMP Portofino):</strong> velocità limitata a <strong>max ${leg.amp_speed_limit_knots} kt</strong></span>`
+                ? `<span style="display:inline-flex;align-items:center;gap:4px;color:#fbbf24;">${SVG_ICONS.alert} <strong>Vincolo Area Marina Protetta (AMP Portofino):</strong> velocità limitata a <strong>max ${escapeHtml(leg.amp_speed_limit_knots)} kt</strong></span>`
                 : "Navigazione libera fuori dalle zone di riserva integrale/generale AMP."
             }
           </div>
@@ -1929,9 +1965,9 @@ async function calculateCoastalRoute() {
       <div class="risk-item border-green">
         <div class="risk-item-title">
           <span class="risk-item-title-label">${SVG_ICONS.compass} Confronto fisico andata vs ritorno</span>
-          <span>Partenza ${plan.schedule.departure_time}</span>
+          <span>Partenza ${escapeHtml(plan.schedule.departure_time)}</span>
         </div>
-        <div class="risk-item-desc">${cmp.delta_summary || ""}</div>
+        <div class="risk-item-desc">${escapeHtml(cmp.delta_summary || "")}</div>
       </div>
     ` + legsHtml;
 
@@ -1966,7 +2002,7 @@ function renderAIBulletinAndOfficialArpal(bulletin, arpal) {
 
     const takeawaysGrid = document.getElementById("ai-takeaways-grid");
     takeawaysGrid.innerHTML = (bulletin.key_takeaways || [])
-      .map((item) => `<div class="ai-takeaway-item">${item}</div>`)
+      .map((item) => `<div class="ai-takeaway-item">${escapeHtml(item)}</div>`)
       .join("");
   }
 
@@ -1983,13 +2019,13 @@ function renderAIBulletinAndOfficialArpal(bulletin, arpal) {
       (d) => `
       <div class="risk-item border-physics">
         <div class="risk-item-title">
-          <span class="risk-item-title-label">${SVG_ICONS.calendar} ${d.label}</span>
+          <span class="risk-item-title-label">${SVG_ICONS.calendar} ${escapeHtml(d.label)}</span>
           <span>Zonizzazione Liguria</span>
         </div>
         <div class="risk-item-desc">
-          <strong>Meteo:</strong> ${d.forecast_text}<br>
-          <strong>Venti:</strong> ${d.winds}<br>
-          <strong>Mare:</strong> ${d.sea}
+          <strong>Meteo:</strong> ${escapeHtml(d.forecast_text)}<br>
+          <strong>Venti:</strong> ${escapeHtml(d.winds)}<br>
+          <strong>Mare:</strong> ${escapeHtml(d.sea)}
         </div>
       </div>
     `
@@ -2000,10 +2036,10 @@ function renderAIBulletinAndOfficialArpal(bulletin, arpal) {
     `
     <div class="risk-item border-green">
       <div class="risk-item-title">
-        <span>Situazione sinottica regionale (${arpal.source || "ARPAL"})</span>
-        <span>${arpal.issued_at || ""}</span>
+        <span>Situazione sinottica regionale (${escapeHtml(arpal.source || "ARPAL")})</span>
+        <span>${escapeHtml(arpal.issued_at || "")}</span>
       </div>
-      <div class="risk-item-desc">${arpal.synoptic_situation || ""}</div>
+      <div class="risk-item-desc">${escapeHtml(arpal.synoptic_situation || "")}</div>
     </div>
   ` + daysHtml;
 }
