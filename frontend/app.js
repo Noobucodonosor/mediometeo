@@ -222,7 +222,10 @@ function renderActiveMapLayer() {
       const rot = ((st.wind_dir_deg ?? 0) + 90) % 360;
       const cls = st.severity === "alert" ? "is-alert" : st.severity === "watch" ? "is-watch" : "";
       const arrow = `<svg width="11" height="11" viewBox="0 0 12 12" style="transform:rotate(${rot}deg)" aria-hidden="true"><path d="M1.5 6h8M6.5 2.5L10.5 6l-4 3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-      addPointMarker(st.lat, st.lon, `${arrow}<span>${escapeHtml(st.wind_knots)} kt</span>`, cls, `${st.name} • ${st.wind_knots} kt`, () => selectCoordsOnMap(st.lat, st.lon, "land"));
+      const windLabel = state.mode === "sea"
+        ? `${st.wind_knots} kt`
+        : `${Math.round((st.wind_knots ?? 0) * 1.852)} km/h`;
+      addPointMarker(st.lat, st.lon, `${arrow}<span>${escapeHtml(windLabel)}</span>`, cls, `${st.name} • ${windLabel}`, () => selectCoordsOnMap(st.lat, st.lon, "land"));
     });
   } else if (state.activeLayer === "waves") {
     const buoy = obs.marine_wave_buoy || obs.buoys_live?.[0];
@@ -251,8 +254,10 @@ function renderActiveMapLayer() {
     state.locations
       .filter((l) => l.loc_type === "rada_porto")
       .forEach((rada) => {
-        if (!canPlace(rada.lat, rada.lon, 84, 26)) return;
-        addPointMarker(rada.lat, rada.lon, escapeHtml(shortRadaName(rada.name)), "", `${rada.name}`, () => selectLocationById(rada.id));
+        if (!canPlace(rada.lat, rada.lon, zoom < 12 ? 46 : 86, 28)) return;
+        const shortName = shortRadaName(rada.name).split(/[\s&/]+/)[0];
+        const labelHtml = zoom < 12 ? "⚓" : `⚓ ${escapeHtml(shortName)}`;
+        addPointMarker(rada.lat, rada.lon, labelHtml, "", `${rada.name}`, () => selectLocationById(rada.id));
       });
   } else if (state.activeLayer === "stations") {
     const allSt = [...(obs.all_weather_stations || obs.nearest_weather_stations || [])].sort(
@@ -487,6 +492,17 @@ function renderWatchBanner(pkg) {
   banner.hidden = false;
 }
 
+function weatherIconSvg(desc = "") {
+  const d = String(desc).toLowerCase();
+  if (d.includes("piogg") || d.includes("rovesc") || d.includes("temporal")) {
+    return '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 9.5h8a2.5 2.5 0 0 0 .3-5A3.5 3.5 0 0 0 5.6 3.8 2.8 2.8 0 0 0 4 9.5z"/><path d="M5.5 11.8l-.6 2M8.5 11.8l-.6 2M11.5 11.8l-.6 2"/></svg>';
+  }
+  if (d.includes("nuvol") || d.includes("copert")) {
+    return '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 11h8a2.5 2.5 0 0 0 .3-5A3.5 3.5 0 0 0 5.6 5.3 2.8 2.8 0 0 0 4 11z"/></svg>';
+  }
+  return '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3.2"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M12.6 3.4l-1.1 1.1M4.5 11.5l-1.1 1.1"/></svg>';
+}
+
 function renderSheet() {
   const pkg = state.weatherPkg;
   if (!pkg) return;
@@ -500,10 +516,8 @@ function renderSheet() {
   const isSea = state.mode === "sea";
 
   const titleEl = document.getElementById("sheet-peek-title");
-  const modeBadge = document.getElementById("sheet-mode-badge");
   const peekSummary = document.getElementById("sheet-peek-summary");
   if (titleEl) titleEl.textContent = state.customCoords && pkg.coordinates?.is_custom_pin ? `Presso ${loc.name}` : loc.name;
-  if (modeBadge) modeBadge.textContent = isSea ? "Mare" : "Terra";
   if (peekSummary) {
     peekSummary.textContent = isSea
       ? `${wind.ligurian_name} ${wind.speed_knots} kt · Hs ${waves.significant_height_m}m`
@@ -514,17 +528,7 @@ function renderSheet() {
     ...(pkg.forecast?.hourly_48h || []).slice(0, 6).map((h) => h.precip_max_lam_mm ?? h.precip_mm ?? 0),
     0
   );
-  const shortEl = document.getElementById("ai-short-summary");
   const fullEl = document.getElementById("ai-full-analysis");
-  if (shortEl) {
-    const convScore = pkg.nowcast?.ligurian_convergence?.convergence_score ?? 0;
-    if (isSea) {
-      shortEl.textContent = `${waves.douglas.label} a ${loc.name} con ${wind.ligurian_name} a ${wind.speed_knots} kt. Risacca a riva intorno a ${cp.bay_surge.shore_breaker_height_m}m.`;
-    } else {
-      const rainHint = rainPeak >= 1.0 ? `Rovesci fino a ${rainPeak.toFixed(1)} mm/h nelle prossime 6h.` : convScore >= 60 ? "Possibili addensamenti locali." : "Asciutto nelle prossime ore.";
-      shortEl.textContent = `${cur.weather_description} a ${loc.name}, ${wind.ligurian_name.toLowerCase()} ${Math.round(cur.wind_kmh)} km/h. ${rainHint}`;
-    }
-  }
   if (fullEl) {
     fullEl.textContent = state.aiBulletin?.synoptic_nowcast_analysis || "";
   }
@@ -542,18 +546,39 @@ function renderSheet() {
 
     const cards = isSea
       ? [
+          { hero: true, icon: weatherIconSvg("mare"), label: "Onda", value: `${waves.significant_height_m} m`, sub: `${waves.douglas.label} · Tp ${waves.peak_period_s}s` },
           { label: "Vento", value: `${wind.speed_knots} kt`, sub: `Raffica ${wind.gust_knots} kt · ${wind.ligurian_name}` },
-          { label: "Onda", value: `${waves.significant_height_m} m`, sub: `Max ${waves.max_height_m}m · Tp ${waves.peak_period_s}s` },
-          { label: "Risacca", value: `${cp.bay_surge.shore_breaker_height_m} m`, sub: `${cp.tides.is_synthetic ? "Marea stimata" : "Marea"} ${cp.tides.current_height_cm}cm` },
-          { label: "Pressione", value: `${Math.round(cur.pressure_hpa)} hPa`, sub: cur.pressure_trend_label || "Stabile" },
+          { label: "Risacca", value: `${cp.bay_surge.shore_breaker_height_m} m`, sub: `Marea ${cp.tides.current_height_cm}cm` },
         ]
       : [
-          { label: "Temperatura", value: `${cur.temp_c.toFixed(1)}°C`, sub: tempSub },
+          { hero: true, icon: weatherIconSvg(cur.weather_description), label: "Temperatura", value: `${cur.temp_c.toFixed(1)}°C`, sub: tempSub },
           { label: "Pioggia 1h", value: `${precip1h} mm/h`, sub: rainSub },
           { label: "Vento", value: `${Math.round(cur.wind_kmh)} km/h`, sub: `${wind.ligurian_name} · ${wind.cardinal}` },
-          { label: "Pressione", value: `${Math.round(cur.pressure_hpa)} hPa`, sub: cur.pressure_trend_label || "Stabile" },
         ];
     metricsEl.innerHTML = cards
+      .map((c) => {
+        const cls = c.hero ? "metric-chip is-hero" : "metric-chip";
+        const valHtml = c.icon
+          ? `<div class="metric-hero-head">${c.icon}<strong>${escapeHtml(c.value)}</strong></div>`
+          : `<strong>${escapeHtml(c.value)}</strong>`;
+        return `<div class="${cls}"><span>${escapeHtml(c.label)}</span>${valHtml}<span>${escapeHtml(c.sub)}</span></div>`;
+      })
+      .join("");
+  }
+
+  const extraEl = document.getElementById("extra-metrics-row");
+  if (extraEl) {
+    const extraCards = isSea
+      ? [
+          { label: "Pressione", value: `${Math.round(cur.pressure_hpa)} hPa`, sub: cur.pressure_trend_label || "Stabile" },
+          { label: "Onda massima", value: `${waves.max_height_m} m`, sub: `Direzione ${waves.direction_cardinal}` },
+          { label: "Temperatura", value: `${cur.temp_c.toFixed(1)}°C`, sub: cur.weather_description },
+        ]
+      : [
+          { label: "Pressione", value: `${Math.round(cur.pressure_hpa)} hPa`, sub: cur.pressure_trend_label || "Stabile" },
+          { label: "Percepita", value: `${landRisk.thermo_comfort?.perceived_temp_c ?? cur.temp_c}°C`, sub: `Umidità ${cur.humidity_pct ?? "--"}%` },
+        ];
+    extraEl.innerHTML = extraCards
       .map((c) => `<div class="metric-chip"><span>${escapeHtml(c.label)}</span><strong>${escapeHtml(c.value)}</strong><span>${escapeHtml(c.sub)}</span></div>`)
       .join("");
   }
@@ -620,6 +645,9 @@ function renderExpandedDetails(pkg) {
       .join("");
   }
 
+  const expGrid2 = document.getElementById("exp-grid-2");
+  if (expGrid2) expGrid2.classList.toggle("is-single-col", state.mode === "sea");
+
   const hySection = document.getElementById("hydrometers-section");
   if (hySection) hySection.hidden = state.mode === "sea";
 
@@ -628,7 +656,10 @@ function renderExpandedDetails(pkg) {
   if (hyGrid) {
     hyGrid.innerHTML = hydros
       .slice(0, 6)
-      .map((hy) => `<div class="obs-row"><div class="obs-row-top"><span><span class="hydro-dot ${escapeHtml(hy.status_level || "green")}"></span>${escapeHtml(hy.name)} (${escapeHtml(hy.river)})</span><span>${escapeHtml(hy.level_m)} m</span></div><div class="obs-row-sub">Gialla ${escapeHtml(hy.warn_threshold_m)}m · Rossa ${escapeHtml(hy.alarm_threshold_m)}m · Ore ${escapeHtml(hy.observed_at)}</div></div>`)
+      .map((hy) => {
+        const cleanRiver = String(hy.river || "").replace(/\s*\([^)]*\)/g, "").trim();
+        return `<div class="obs-row"><div class="obs-row-top"><span><span class="hydro-dot ${escapeHtml(hy.status_level || "green")}"></span>${escapeHtml(hy.name)} · ${escapeHtml(cleanRiver)}</span><span>${escapeHtml(hy.level_m)} m</span></div><div class="obs-row-sub">Gialla ${escapeHtml(hy.warn_threshold_m)}m · Rossa ${escapeHtml(hy.alarm_threshold_m)}m · Ore ${escapeHtml(hy.observed_at)}</div></div>`;
+      })
       .join("");
   }
 
@@ -819,8 +850,25 @@ function bindEvents() {
     });
   });
 
+  const moreBtn = document.getElementById("btn-rail-more");
+  const moreMenu = document.getElementById("rail-more-menu");
+  moreBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!moreMenu) return;
+    moreMenu.hidden = !moreMenu.hidden;
+    moreBtn.setAttribute("aria-expanded", moreMenu.hidden ? "false" : "true");
+  });
+  document.addEventListener("click", (ev) => {
+    if (moreMenu && !moreMenu.hidden && !ev.target.closest("#rail-more-menu") && !ev.target.closest("#btn-rail-more")) {
+      moreMenu.hidden = true;
+      moreBtn?.setAttribute("aria-expanded", "false");
+    }
+  });
+
   const routePanel = document.getElementById("route-panel");
   document.getElementById("btn-open-route")?.addEventListener("click", (e) => {
+    if (moreMenu) moreMenu.hidden = true;
+    moreBtn?.setAttribute("aria-expanded", "false");
     if (!routePanel) return;
     routePanel.hidden = !routePanel.hidden;
     e.currentTarget.setAttribute("aria-expanded", routePanel.hidden ? "false" : "true");
