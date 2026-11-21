@@ -600,6 +600,25 @@ function initLeafletMap() {
     zoomControl: true,
   });
 
+  // Base vettoriale costa ligure (sempre visibile anche offline / senza tile raster)
+  const liguriaLandPoly = [
+    [45.10, 7.40], [45.10, 10.30], [44.05, 10.30],
+    [44.05, 9.98], [44.10, 9.83], [44.14, 9.65], [44.23, 9.45],
+    [44.27, 9.39], [44.31, 9.33], [44.345, 9.234], [44.31, 9.215],
+    [44.298, 9.218], [44.315, 9.175], [44.322, 9.145], [44.349, 9.151],
+    [44.362, 9.120], [44.380, 9.035], [44.388, 8.973], [44.398, 8.926],
+    [44.418, 8.775], [44.399, 8.685], [44.34, 8.56], [44.30, 8.48],
+    [44.18, 8.35], [44.05, 8.22], [43.88, 8.02], [43.81, 7.77],
+    [43.78, 7.60], [43.78, 7.40],
+  ];
+  L.polygon(liguriaLandPoly, {
+    color: "rgba(90, 185, 252, 0.45)",
+    weight: 1.5,
+    fillColor: "#141c2b",
+    fillOpacity: 0.92,
+    interactive: false,
+  }).addTo(state.map);
+
   // Base Map OpenStreetMap Ufficiale (100% Free, Zero API Key) con filtro Dark Sala Operativa
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "&copy; OpenStreetMap contributors | MedioMeteo Genova",
@@ -637,15 +656,14 @@ function initLeafletMap() {
       state.map.removeLayer(state.customMarker);
     }
     state.customMarker = L.circleMarker([lat, lon], {
-      radius: 9,
+      radius: 8,
       color: "#5ab9fc",
-      weight: 3,
+      weight: 2.5,
       fillColor: "#f59e0b",
       fillOpacity: 0.92,
     })
       .addTo(state.map)
-      .bindPopup(`Punto selezionato:<br><strong>${lat}, ${lon}</strong>`)
-      .openPopup();
+      .bindTooltip(`Punto selezionato: <strong>${lat}, ${lon}</strong>`);
 
     await refreshAllData(false);
     window.switchTab("tab-adesso");
