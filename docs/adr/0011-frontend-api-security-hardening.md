@@ -48,15 +48,15 @@ L'audit AppSec & Reliability del 2026-11-21 ha individuato diverse vulnerabilit√
 
 ## 4. Task Operativi Collegati (con Definition of Done)
 
-- [ ] **TASK-SEC-02**: **Frontend XSS & DOM Hardening (`escapeHtml` e rimozione handler inline)**
+- [x] **TASK-SEC-02**: **Frontend XSS & DOM Hardening (`escapeHtml` e rimozione handler inline)**
   - *File coinvolti*: `frontend/app.js`, `frontend/index.html`, `tests/`
   - *Acceptance Criteria*: nessuna interpolazione non escapata di dati esterni in `.innerHTML`; zero `onclick=` inline in `index.html`; test automatizzati con payload XSS `<script>` / `onerror=`.
   - *Verification Step*: `.venv/bin/pytest -v`
-- [ ] **TASK-SEC-03**: **API Input Validation (`/api/v1/omirl-chart`), SRI CDN & Security Headers/CORS**
+- [x] **TASK-SEC-03**: **API Input Validation (`/api/v1/omirl-chart`), SRI CDN & Security Headers/CORS**
   - *File coinvolti*: `backend/main.py`, `backend/config.py`, `frontend/index.html`, `tests/`
   - *Acceptance Criteria*: `code` rifiuta caratteri speciali (`422`); errori `502` senza stack/eccezione raw; SRI presente sui CDN; header `CSP`, `X-Content-Type-Options`, `X-Frame-Options` verificati via test.
   - *Verification Step*: `.venv/bin/pytest -v`
-- [ ] **TASK-SEC-04**: **Rate Limiting, Single-Flight Lock, Fix Cache Key `ai-bulletin` & Circuit Breaker**
+- [x] **TASK-SEC-04**: **Rate Limiting, Single-Flight Lock, Fix Cache Key `ai-bulletin` & Circuit Breaker**
   - *File coinvolti*: `backend/main.py`, `backend/engine/connectors.py`, `backend/engine/omirl_arpal.py`, `tests/`
   - *Acceptance Criteria*: `b_key` include `lat` e `lon`; richieste concorrenti sulla stessa `cache_key` eseguono un solo fetch upstream; `429` su abuso `/api/v1/ai-bulletin` o `?refresh=true`; circuit breaker apre dopo 3 errori e si richiude dopo cooldown.
   - *Verification Step*: `.venv/bin/pytest -v`

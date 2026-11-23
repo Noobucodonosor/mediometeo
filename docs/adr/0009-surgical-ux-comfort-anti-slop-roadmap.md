@@ -43,9 +43,9 @@ Dopo l'introduzione della palette `blue-black-cornflower` e dei font `IBM Plex S
 ## 3. Roadmap Sequenziale su GitHub (Milestone `v3.0 — Surgical UX Comfort & Anti-Slop`)
 
 - [x] **TASK-UX-04** (`#16`, P0): **Shell, Topbar, HUD & Navigazione — Pulizia Cognitiva, Ricerca Unificata e Rimozione Ridondanze**
-- [ ] **TASK-UX-05** (`#17`, P1): **Schermata Mappa (`#tab-mappa`) — Decluttering Cartografico e Selettore Layer Singolo**
-- [ ] **TASK-UX-06** (`#18`, P1): **Schermata Adesso (`#tab-adesso`) — Zero Duplicati HUD, Liste Tabellari `1px` e Rimozione Finte Webcam SVG**
-- [ ] **TASK-UX-07** (`#19`, P1): **Schermata Nowcast 3h (`#tab-nowcast`) — Coerenza Modalità Terra/Mare e Righe Strumentali al Posto dei Muri di Testo**
-- [ ] **TASK-UX-08** (`#20`, P1): **Schermata Modelli (`#tab-modelli`) — Vista Focalizzata (`Meteogrammi | Confronto 5 Modelli | 7 Giorni`) e Leggibilità Tabellare**
-- [ ] **TASK-UX-09** (`#21`, P2): **Schermate Rotta (`#tab-rotta`) & Bollettini (`#tab-bollettini`) — Split Strumentale Rotta e Tipografia Editoriale Bollettini**
-- [ ] **TASK-UX-10** (`#22`, P1): **Verifica Visiva Real-Browser (`shoot.mjs` `1440` / `768` / `390`), Audit Copy-Lint e Allineamento Finale `/orologio`**
+- [x] **TASK-UX-05** (`#17`, P1): **Schermata Mappa (`#tab-mappa`) — Decluttering Cartografico e Selettore Layer Singolo**
+- [x] **TASK-UX-06** (`#18`, P1): **Schermata Adesso (`#tab-adesso`) — Zero Duplicati HUD, Liste Tabellari `1px` e Rimozione Finte Webcam SVG**
+- [x] **TASK-UX-07** (`#19`, P1): **Schermata Nowcast 3h (`#tab-nowcast`) — Coerenza Modalità Terra/Mare e Righe Strumentali al Posto dei Muri di Testo**
+- [x] **TASK-UX-08** (`#20`, P1): **Schermata Modelli (`#tab-modelli`) — Vista Focalizzata (`Meteogrammi | Confronto 5 Modelli | 7 Giorni`) e Leggibilità Tabellare**
+- [x] **TASK-UX-09** (`#21`, P2): **Schermate Rotta (`#tab-rotta`) & Bollettini (`#tab-bollettini`) — Split Strumentale Rotta e Tipografia Editoriale Bollettini**
+- [x] **TASK-UX-10** (`#22`, P1): **Verifica Visiva Real-Browser (`shoot.mjs` `1440` / `768` / `390`), Audit Copy-Lint e Allineamento Finale `/orologio`**

@@ -40,11 +40,11 @@ Il repository non dispone ancora di una pipeline CI/CD (`.github/workflows/` è 
 
 ## 4. Task Operativi Collegati (con Definition of Done)
 
-- [ ] **TASK-CICD-01**: **GitHub Actions CI Pipeline (`pytest` offline, `pre_release_check.py`, `docker build`)**
+- [x] **TASK-CICD-01**: **GitHub Actions CI Pipeline (`pytest` offline, `pre_release_check.py`, `docker build`)**
   - *File coinvolti*: `.github/workflows/ci.yml`, `requirements.txt`, `Dockerfile`
   - *Acceptance Criteria*: workflow verde su PR/push; `docker build` completa su `python:3.12-slim`; `pre_release_check.py` eseguito ad ogni run.
   - *Verification Step*: `python3 ~/.gemini/config/skills/adr-github-methodology/scripts/pre_release_check.py && docker build -t mediometeo:ci .`
-- [ ] **TASK-QA-01**: **Deterministic Offline Contract Tests & Separazione Live Suite (`@pytest.mark.live`)**
+- [x] **TASK-QA-01**: **Deterministic Offline Contract Tests & Separazione Live Suite (`@pytest.mark.live`)**
   - *File coinvolti*: `pyproject.toml` / `pytest.ini`, `tests/fixtures/*`, `tests/test_api_e2e.py`, `tests/`
   - *Acceptance Criteria*: `.venv/bin/pytest -m "not live"` passa al 100% senza accesso internet e senza dipendere da cache SQLite preesistente.
   - *Verification Step*: `.venv/bin/pytest -v -m "not live"`
